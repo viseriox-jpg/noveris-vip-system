@@ -13,7 +13,7 @@ import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-public final class KitEditorMenu extends ChestMenu {
+final class KitEditorMenu extends ChestMenu {
     static final int TEMPORARY_FROM = 9;
     static final int TEMPORARY_TO = 26;
     static final int PERMANENT_FROM = 36;
@@ -26,17 +26,9 @@ public final class KitEditorMenu extends ChestMenu {
     private final String plan;
     private boolean closedByButton;
 
-    public KitEditorMenu(int containerId, Inventory inventory) {
-        super(VipMenus.KIT_EDITOR.get(), containerId, inventory, new SimpleContainer(54), 6);
-        this.editor = null;
-        this.service = null;
-        this.kitName = "";
-        this.plan = "";
-    }
-
     KitEditorMenu(int containerId, Inventory inventory, SimpleContainer editor,
                   VipService service, String kitName, String plan) {
-        super(VipMenus.KIT_EDITOR.get(), containerId, inventory, editor, 6);
+        super(MenuType.GENERIC_9x6, containerId, inventory, editor, 6);
         this.editor = editor;
         this.service = service;
         this.kitName = kitName;
