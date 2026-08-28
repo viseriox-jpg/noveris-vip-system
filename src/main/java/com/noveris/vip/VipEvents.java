@@ -48,7 +48,7 @@ final class VipEvents {
                                 .then(Commands.argument("player", EntityArgument.player())
                                         .executes(ctx -> grant(ctx, 30))
                                         .then(Commands.argument("dias", IntegerArgumentType.integer(1, 3650))
-                                                .executes(ctx -> grant(ctx, IntegerArgumentType.getInteger(ctx, "dias"))))))
+                                                .executes(ctx -> grant(ctx, IntegerArgumentType.getInteger(ctx, "dias")))))))
                 .then(Commands.literal("renovar")
                         .then(Commands.argument("player", EntityArgument.player())
                                 .then(Commands.argument("dias", IntegerArgumentType.integer(1, 3650))
