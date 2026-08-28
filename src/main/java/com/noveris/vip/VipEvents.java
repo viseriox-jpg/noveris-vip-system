@@ -13,6 +13,7 @@ import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
@@ -469,7 +470,7 @@ final class VipEvents {
         ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
         VipService.Diagnosis diagnosis = service.diagnose(target);
         VipStore.Profile profile = diagnosis.profile();
-        Component report = Component.literal("✦ DIAGNÓSTICO VIP — ")
+        MutableComponent report = Component.literal("✦ DIAGNÓSTICO VIP — ")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
                 .append(target.getDisplayName().copy().withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD));
         if (profile == null) {
