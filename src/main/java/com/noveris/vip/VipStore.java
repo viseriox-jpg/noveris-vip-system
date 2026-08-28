@@ -20,6 +20,7 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.UUID;
 
 final class VipStore {
@@ -93,11 +94,23 @@ final class VipStore {
         Map<String, Profile> profiles;
         Map<String, List<VaultEntry>> vault;
         Map<String, List<HistoryEntry>> history;
+        Map<String, PlanDefinition> plans;
+        Map<String, PendingDelivery> pendingDeliveries;
+        Map<String, List<Integer>> sentWarnings;
         Data normalize() {
             if (kits == null) kits = new HashMap<>();
             if (profiles == null) profiles = new HashMap<>();
             if (vault == null) vault = new HashMap<>();
             if (history == null) history = new HashMap<>();
+            if (plans == null) plans = new LinkedHashMap<>();
+            if (plans.isEmpty()) {
+                plans.put("viajante", new PlanDefinition("viajante", "Viajante", true, 1));
+                plans.put("nobre", new PlanDefinition("nobre", "Nobre", true, 2));
+                plans.put("regente", new PlanDefinition("regente", "Regente", true, 3));
+                plans.put("soberano", new PlanDefinition("soberano", "Soberano", true, 4));
+            }
+            if (pendingDeliveries == null) pendingDeliveries = new HashMap<>();
+            if (sentWarnings == null) sentWarnings = new HashMap<>();
             return this;
         }
     }
@@ -113,4 +126,6 @@ final class VipStore {
     record VaultEntry(String encodedStack, long archivedAt, long deleteAt,
                       String originalOwner, String kit) {}
     record HistoryEntry(long timestamp, String playerName, String action, String detail) {}
+    record PlanDefinition(String id, String displayName, boolean enabled, int order) {}
+    record PendingDelivery(String playerName, String kit, int days, String staffName, long queuedAt) {}
 }

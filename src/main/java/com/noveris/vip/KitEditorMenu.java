@@ -23,11 +23,11 @@ final class KitEditorMenu extends ChestMenu {
     private final SimpleContainer editor;
     private final VipService service;
     private final String kitName;
-    private final VipPlan plan;
+    private final String plan;
     private boolean closedByButton;
 
     KitEditorMenu(int containerId, Inventory inventory, SimpleContainer editor,
-                  VipService service, String kitName, VipPlan plan) {
+                  VipService service, String kitName, String plan) {
         super(MenuType.GENERIC_9x6, containerId, inventory, editor, 6);
         this.editor = editor;
         this.service = service;

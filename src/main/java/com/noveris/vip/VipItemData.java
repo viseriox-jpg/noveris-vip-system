@@ -55,6 +55,16 @@ final class VipItemData {
         updateLore(stack, expiresAt, true);
     }
 
+    static void makePermanent(ItemStack stack) {
+        CompoundTag root = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+        root.remove(ROOT);
+        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(root));
+        ItemLore current = stack.getOrDefault(DataComponents.LORE, ItemLore.EMPTY);
+        List<Component> lines = new ArrayList<>(current.lines());
+        if (lines.size() >= 3) lines.subList(lines.size() - 3, lines.size()).clear();
+        stack.set(DataComponents.LORE, new ItemLore(lines));
+    }
+
     private static void updateLore(ItemStack stack, long expiresAt, boolean replacePrevious) {
         ItemLore current = stack.getOrDefault(DataComponents.LORE, ItemLore.EMPTY);
         List<Component> lines = new ArrayList<>(current.lines());

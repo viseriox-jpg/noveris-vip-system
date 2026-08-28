@@ -9,6 +9,8 @@ import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.Container;
 import net.minecraft.core.component.DataComponents;
 
 import java.util.HashMap;
@@ -30,7 +32,7 @@ final class VipService {
         return store;
     }
 
-    void openKitEditor(ServerPlayer staff, String kitName, VipPlan plan) {
+    void openKitEditor(ServerPlayer staff, String kitName, String plan) {
         VipStore current = store(staff.getServer());
         SimpleContainer editor = new SimpleContainer(54);
         VipStore.Kit existing = current.data.kits.get(kitName.toLowerCase());
@@ -49,14 +51,14 @@ final class VipService {
         staff.openMenu(provider);
     }
 
-    void saveKit(ServerPlayer staff, String kitName, VipPlan plan, SimpleContainer editor) {
+    void saveKit(ServerPlayer staff, String kitName, String plan, SimpleContainer editor) {
         VipStore current = store(staff.getServer());
-        VipStore.Kit kit = new VipStore.Kit(kitName, plan.id);
+        VipStore.Kit kit = new VipStore.Kit(kitName, plan);
         saveRange(staff, editor, kit, KitEditorMenu.TEMPORARY_FROM, KitEditorMenu.TEMPORARY_TO, true);
         saveRange(staff, editor, kit, KitEditorMenu.PERMANENT_FROM, KitEditorMenu.PERMANENT_TO, false);
         current.data.kits.put(kitName.toLowerCase(), kit);
         current.addHistory(staff.getUUID(), staff.getName().getString(), "KIT_SALVO",
-                kitName + " | plano: " + plan.id + " | itens: " + kit.items.size());
+                kitName + " | plano: " + plan + " | itens: " + kit.items.size());
         current.save();
         staff.sendSystemMessage(Component.literal("Kit " + kitName + " salvo com "
                 + kit.items.size() + " pilhas de itens.").withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
@@ -90,6 +92,7 @@ final class VipService {
         current.addHistory(staff.getUUID(), staff.getName().getString(), "VIP_ENTREGUE",
                 target.getName().getString() + " | kit: " + kit.name);
         current.save();
+        current.data.sentWarnings.remove(target.getUUID().toString());
         target.sendSystemMessage(Component.literal("✦ VIP ATIVADO ✦\n")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
                 .append(Component.literal("Plano: ").withStyle(ChatFormatting.GRAY))
@@ -110,10 +113,67 @@ final class VipService {
         current.data.profiles.put(target.getUUID().toString(), new VipStore.Profile(
                 old.playerName(), old.plan(), old.kit(), old.grantedAt(), newExpiry));
         updateExpiry(target, newExpiry);
+        current.data.sentWarnings.remove(target.getUUID().toString());
         current.addHistory(target.getUUID(), target.getName().getString(), "VIP_RENOVADO",
                 days + " dias | staff: " + staff.getName().getString());
         current.save();
         return true;
+    }
+
+    boolean queueDelivery(MinecraftServer server, UUID playerId, String playerName,
+                          String kitName, int days, String staffName) {
+        VipStore current = store(server);
+        if (!current.data.kits.containsKey(kitName.toLowerCase())) return false;
+        current.data.pendingDeliveries.put(playerId.toString(), new VipStore.PendingDelivery(
+                playerName, kitName.toLowerCase(), days, staffName, System.currentTimeMillis()));
+        current.addHistory(playerId, playerName, "ENTREGA_PENDENTE",
+                "kit: " + kitName + " | " + days + " dias | staff: " + staffName);
+        current.save();
+        return true;
+    }
+
+    boolean renewOffline(MinecraftServer server, UUID playerId, String playerName,
+                         int days, String staffName) {
+        VipStore current = store(server);
+        VipStore.Profile old = current.data.profiles.get(playerId.toString());
+        if (old == null) return false;
+        long newExpiry = Math.max(System.currentTimeMillis(), old.expiresAt())
+                + days * 24L * 60 * 60 * 1000;
+        current.data.profiles.put(playerId.toString(), new VipStore.Profile(
+                playerName, old.plan(), old.kit(), old.grantedAt(), newExpiry));
+        current.data.sentWarnings.remove(playerId.toString());
+        current.addHistory(playerId, playerName, "VIP_RENOVADO_OFFLINE",
+                days + " dias | staff: " + staffName);
+        current.save();
+        return true;
+    }
+
+    void playerLoggedIn(ServerPlayer player) {
+        VipStore current = store(player.getServer());
+        VipStore.PendingDelivery pending = current.data.pendingDeliveries.remove(player.getUUID().toString());
+        if (pending != null) deliverPending(current, player, pending);
+        VipStore.Profile profile = current.data.profiles.get(player.getUUID().toString());
+        if (profile != null) updateExpiry(player, profile.expiresAt());
+        current.save();
+    }
+
+    private void deliverPending(VipStore current, ServerPlayer target, VipStore.PendingDelivery pending) {
+        VipStore.Kit kit = current.data.kits.get(pending.kit());
+        if (kit == null) return;
+        long now = System.currentTimeMillis();
+        long expiresAt = now + pending.days() * 24L * 60 * 60 * 1000;
+        current.data.profiles.put(target.getUUID().toString(), new VipStore.Profile(
+                target.getName().getString(), kit.plan, kit.name, now, expiresAt));
+        for (VipStore.KitItem template : kit.items) {
+            ItemStack stack = VipStore.decode(template.encodedStack(), target.registryAccess()).copy();
+            if (template.temporary()) VipItemData.attach(stack, target.getUUID(),
+                    target.getName().getString(), kit.name, expiresAt);
+            if (!target.getInventory().add(stack)) target.drop(stack, false);
+        }
+        current.addHistory(target.getUUID(), target.getName().getString(), "VIP_ENTREGUE_AO_ENTRAR",
+                "kit: " + kit.name + " | staff: " + pending.staffName());
+        target.sendSystemMessage(Component.literal("✦ SEU VIP PENDENTE FOI ENTREGUE ✦")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
     }
 
     private void updateExpiry(ServerPlayer player, long expiry) {
@@ -128,8 +188,59 @@ final class VipService {
         if (++ticks % 20 != 0) return;
         VipStore current = store(currentServer);
         long now = System.currentTimeMillis();
-        for (ServerPlayer player : currentServer.getPlayerList().getPlayers()) scanPlayer(current, player, now);
+        for (ServerPlayer player : currentServer.getPlayerList().getPlayers()) {
+            scanPlayer(current, player, now);
+            sendExpiryWarnings(current, player, now);
+        }
+        if (ticks % 1200 == 0) scanDroppedItems(currentServer, current, now);
         if (ticks % 1200 == 0) { current.purgeVault(); current.save(); }
+    }
+
+    private void sendExpiryWarnings(VipStore current, ServerPlayer player, long now) {
+        VipStore.Profile profile = current.data.profiles.get(player.getUUID().toString());
+        if (profile == null || profile.expiresAt() <= now) return;
+        long remainingDays = Math.max(1, (profile.expiresAt() - now + 86_399_999L) / 86_400_000L);
+        List<Integer> sent = current.data.sentWarnings.computeIfAbsent(player.getUUID().toString(),
+                ignored -> new java.util.ArrayList<>());
+        for (int warning : VipConfig.load(player.getServer()).warningDays) {
+            if (remainingDays <= warning && !sent.contains(warning)) {
+                sent.add(warning);
+                player.sendSystemMessage(Component.literal("⚠ SEU VIP EXPIRA EM " + remainingDays + " DIA(S)")
+                        .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)
+                        .append(Component.literal("\nPlano: " + profile.plan() + " | use /vip kits para consultar os planos.")
+                                .withStyle(ChatFormatting.GRAY)));
+                current.save();
+            }
+        }
+    }
+
+    private void scanDroppedItems(MinecraftServer server, VipStore current, long now) {
+        for (var level : server.getAllLevels()) {
+            for (var entity : level.getAllEntities()) {
+                if (!(entity instanceof ItemEntity itemEntity)) continue;
+                ItemStack stack = itemEntity.getItem();
+                VipItemData.read(stack).ifPresent(info -> {
+                    if (info.expiresAt() > now) return;
+                    current.archive(info.originalOwner(), info.originalOwnerName(), stack.copy(), level.registryAccess());
+                    itemEntity.discard();
+                    current.save();
+                });
+            }
+        }
+    }
+
+    void scanContainer(MinecraftServer server, Container container) {
+        VipStore current = store(server);
+        long now = System.currentTimeMillis();
+        for (int slot = 0; slot < container.getContainerSize(); slot++) {
+            ItemStack stack = container.getItem(slot);
+            VipItemData.read(stack).ifPresent(info -> {
+                if (info.expiresAt() > now) return;
+                current.archive(info.originalOwner(), info.originalOwnerName(), stack.copy(), server.registryAccess());
+                stack.setCount(0);
+                current.save();
+            });
+        }
     }
 
     private void scanPlayer(VipStore current, ServerPlayer player, long now) {
@@ -175,6 +286,39 @@ final class VipService {
         staff.openMenu(new SimpleMenuProvider((id, inv, player) -> new VaultViewMenu(id, inv, inventory),
                 Component.literal("Cofre VIP de " + target.getName().getString() + " | " + entries.size() + " itens")));
     }
+
+    VaultResult restoreVault(ServerPlayer staff, ServerPlayer target, int oneBasedSlot,
+                             int days, boolean permanent) {
+        VipStore current = store(staff.getServer());
+        List<VipStore.VaultEntry> entries = current.data.vault.get(target.getUUID().toString());
+        if (entries == null || oneBasedSlot < 1 || oneBasedSlot > entries.size()) return VaultResult.INVALID_SLOT;
+        VipStore.VaultEntry entry = entries.get(oneBasedSlot - 1);
+        if (entry.deleteAt() <= System.currentTimeMillis()) return VaultResult.EXPIRED_ARCHIVE;
+        ItemStack stack = VipStore.decode(entry.encodedStack(), target.registryAccess());
+        if (stack.isEmpty()) return VaultResult.INVALID_ITEM;
+        if (permanent) VipItemData.makePermanent(stack);
+        else VipItemData.renew(stack, System.currentTimeMillis() + days * 86_400_000L);
+        if (!target.getInventory().add(stack)) target.drop(stack, false);
+        entries.remove(oneBasedSlot - 1);
+        current.addHistory(target.getUUID(), target.getName().getString(),
+                permanent ? "COFRE_RESTAURADO_PERMANENTE" : "COFRE_RESTAURADO",
+                stack.getHoverName().getString() + " | staff: " + staff.getName().getString());
+        current.save();
+        return VaultResult.SUCCESS;
+    }
+
+    boolean deleteVaultEntry(ServerPlayer staff, ServerPlayer target, int oneBasedSlot) {
+        VipStore current = store(staff.getServer());
+        List<VipStore.VaultEntry> entries = current.data.vault.get(target.getUUID().toString());
+        if (entries == null || oneBasedSlot < 1 || oneBasedSlot > entries.size()) return false;
+        VipStore.VaultEntry removed = entries.remove(oneBasedSlot - 1);
+        current.addHistory(target.getUUID(), target.getName().getString(), "COFRE_EXCLUIDO",
+                "kit: " + removed.kit() + " | staff: " + staff.getName().getString());
+        current.save();
+        return true;
+    }
+
+    enum VaultResult { SUCCESS, INVALID_SLOT, EXPIRED_ARCHIVE, INVALID_ITEM }
 
     boolean openKitPreview(ServerPlayer player, String kitName) {
         VipStore.Kit kit = store(player.getServer()).data.kits.get(kitName.toLowerCase());
