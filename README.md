@@ -56,7 +56,7 @@ Comidas, poções e outros consumíveis mantêm o funcionamento normal: cada uso
 
 O inventário, armadura, mão secundária e Ender Chest dos jogadores conectados são verificados a cada segundo. Ao vencer, o item é retirado e armazenado no cofre administrativo durante sete dias; depois é eliminado do registro. Um item vencido que permaneceu no chão é recolhido pelo sistema assim que entrar novamente no inventário de um jogador.
 
-Itens dropados passam por verificação periódica e recipientes vanilla são verificados quando o chunk é carregado. Pilhas divididas recebem novas identificações de rastreamento, mantendo proprietário, kit e vencimento. Integrações com inventários internos de mods dependem de esses inventários exporem seus itens ao Minecraft/NeoForge.
+Itens dropados passam por verificação periódica. Recipientes vanilla encontrados durante o carregamento de chunks entram em uma fila e são verificados gradualmente, com limite de oito recipientes por tick, evitando atrasar a abertura do mundo. Pilhas divididas recebem novas identificações de rastreamento, mantendo proprietário, kit e vencimento. Integrações com inventários internos de mods dependem de esses inventários exporem seus itens ao Minecraft/NeoForge.
 
 O jogador recebe avisos configuráveis antes do vencimento. Os padrões são 7, 3 e 1 dia. Níveis de permissão e dias de aviso ficam em `serverconfig/noveris_vip_system-server.toml`.
 

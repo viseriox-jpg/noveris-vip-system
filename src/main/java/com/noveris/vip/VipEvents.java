@@ -523,7 +523,7 @@ final class VipEvents {
     @SubscribeEvent public void chunkLoaded(ChunkEvent.Load event) {
         if (!(event.getChunk() instanceof LevelChunk chunk) || event.getLevel().getServer() == null) return;
         chunk.getBlockEntities().values().forEach(blockEntity -> {
-            if (blockEntity instanceof Container container) service.scanContainer(event.getLevel().getServer(), container);
+            if (blockEntity instanceof Container container) service.queueContainer(container);
         });
     }
 

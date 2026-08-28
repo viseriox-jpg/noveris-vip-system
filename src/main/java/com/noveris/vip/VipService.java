@@ -22,10 +22,19 @@ final class VipService {
     private VipStore store;
     private MinecraftServer server;
     private final Map<UUID, UUID> lastKnownHolder = new HashMap<>();
+    private final java.util.ArrayDeque<Container> containerQueue = new java.util.ArrayDeque<>();
+    private final java.util.Set<Container> queuedContainers = java.util.Collections.newSetFromMap(
+            new java.util.IdentityHashMap<>());
+    private static final int CONTAINERS_PER_TICK = 8;
     private int ticks;
 
     private VipStore store(MinecraftServer currentServer) {
         if (store == null || server != currentServer) {
+            if (server != null && server != currentServer) {
+                containerQueue.clear();
+                queuedContainers.clear();
+                lastKnownHolder.clear();
+            }
             server = currentServer;
             store = VipStore.load(currentServer);
         }
@@ -236,6 +245,7 @@ final class VipService {
     }
 
     void tick(MinecraftServer currentServer) {
+        processContainerQueue(currentServer);
         if (++ticks % 20 != 0) return;
         VipStore current = store(currentServer);
         long now = System.currentTimeMillis();
@@ -246,6 +256,20 @@ final class VipService {
         }
         if (ticks % 1200 == 0) scanDroppedItems(currentServer, current, now);
         if (ticks % 1200 == 0) { current.purgeVault(); current.save(); }
+    }
+
+    void queueContainer(Container container) {
+        if (queuedContainers.add(container)) containerQueue.addLast(container);
+    }
+
+    private void processContainerQueue(MinecraftServer server) {
+        for (int processed = 0; processed < CONTAINERS_PER_TICK && !containerQueue.isEmpty(); processed++) {
+            Container container = containerQueue.removeFirst();
+            queuedContainers.remove(container);
+            if (container instanceof net.minecraft.world.level.block.entity.BlockEntity blockEntity
+                    && blockEntity.isRemoved()) continue;
+            scanContainer(server, container);
+        }
     }
 
     private void normalizeSplitStacks(MinecraftServer server) {
@@ -295,14 +319,18 @@ final class VipService {
     void scanContainer(MinecraftServer server, Container container) {
         VipStore current = store(server);
         long now = System.currentTimeMillis();
+        boolean changed = false;
         for (int slot = 0; slot < container.getContainerSize(); slot++) {
             ItemStack stack = container.getItem(slot);
-            VipItemData.read(stack).ifPresent(info -> {
-                if (info.expiresAt() > now) return;
-                current.archive(info.originalOwner(), info.originalOwnerName(), stack.copy(), server.registryAccess());
-                stack.setCount(0);
-                current.save();
-            });
+            VipItemData.Info info = VipItemData.read(stack).orElse(null);
+            if (info == null || info.expiresAt() > now) continue;
+            current.archive(info.originalOwner(), info.originalOwnerName(), stack.copy(), server.registryAccess());
+            stack.setCount(0);
+            changed = true;
+        }
+        if (changed) {
+            container.setChanged();
+            current.save();
         }
     }
 
