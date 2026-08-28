@@ -14,9 +14,12 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 final class KitEditorMenu extends ChestMenu {
-    private static final int CONTROL_FROM = 45;
-    private static final int SAVE_SLOT = 49;
-    private static final int CANCEL_SLOT = 53;
+    static final int TEMPORARY_FROM = 9;
+    static final int TEMPORARY_TO = 26;
+    static final int PERMANENT_FROM = 36;
+    static final int PERMANENT_TO = 53;
+    private static final int SAVE_SLOT = 31;
+    private static final int CANCEL_SLOT = 35;
     private final SimpleContainer editor;
     private final VipService service;
     private final String kitName;
@@ -34,11 +37,16 @@ final class KitEditorMenu extends ChestMenu {
     }
 
     private void installControls() {
-        for (int slot = CONTROL_FROM; slot < 54; slot++) {
-            ItemStack pane = new ItemStack(slot < SAVE_SLOT ? Items.ORANGE_STAINED_GLASS_PANE
-                    : Items.GRAY_STAINED_GLASS_PANE);
-            pane.set(DataComponents.CUSTOM_NAME, Component.literal(slot < SAVE_SLOT
-                    ? "Acima: temporários | linhas 4-5: permanentes" : "Controle").withStyle(ChatFormatting.GRAY));
+        for (int slot = 0; slot < 9; slot++) {
+            ItemStack pane = new ItemStack(Items.ORANGE_STAINED_GLASS_PANE);
+            pane.set(DataComponents.CUSTOM_NAME, Component.literal("ITENS TEMPORÁRIOS — expiram com o VIP")
+                    .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+            editor.setItem(slot, pane);
+        }
+        for (int slot = 27; slot < 36; slot++) {
+            ItemStack pane = new ItemStack(Items.LIGHT_BLUE_STAINED_GLASS_PANE);
+            pane.set(DataComponents.CUSTOM_NAME, Component.literal("ITENS PERMANENTES — não expiram")
+                    .withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD));
             editor.setItem(slot, pane);
         }
         ItemStack save = new ItemStack(Items.EMERALD_BLOCK);
@@ -51,7 +59,7 @@ final class KitEditorMenu extends ChestMenu {
 
     @Override
     public void clicked(int slotId, int button, ClickType clickType, Player player) {
-        if (slotId >= CONTROL_FROM && slotId < 54) {
+        if (isHeader(slotId)) {
             if (slotId == SAVE_SLOT && player instanceof ServerPlayer serverPlayer) {
                 service.saveKit(serverPlayer, kitName, plan, editor);
                 closedByButton = true;
@@ -75,9 +83,16 @@ final class KitEditorMenu extends ChestMenu {
     }
 
     private void returnInputItems(ServerPlayer player) {
-        for (int slot = 0; slot < CONTROL_FROM; slot++) {
+        returnRange(player, TEMPORARY_FROM, TEMPORARY_TO);
+        returnRange(player, PERMANENT_FROM, PERMANENT_TO);
+    }
+
+    private void returnRange(ServerPlayer player, int from, int to) {
+        for (int slot = from; slot <= to; slot++) {
             ItemStack stack = editor.removeItemNoUpdate(slot);
             if (!stack.isEmpty()) player.getInventory().placeItemBackInInventory(stack);
         }
     }
+
+    private boolean isHeader(int slot) { return slot >= 0 && slot < 9 || slot >= 27 && slot < 36; }
 }
