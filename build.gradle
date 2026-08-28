@@ -13,6 +13,8 @@ neoForge {
     mods { noveris_vip_system { sourceSet sourceSets.main } }
 }
 repositories { mavenCentral() }
+dependencies { testImplementation platform('org.junit:junit-bom:5.11.4'); testImplementation 'org.junit.jupiter:junit-jupiter' }
+test { useJUnitPlatform() }
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 processResources {
     def props = [mod_id: mod_id, mod_name: mod_name, mod_license: mod_license,

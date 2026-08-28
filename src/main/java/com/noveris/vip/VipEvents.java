@@ -92,6 +92,16 @@ final class VipEvents {
                         .then(Commands.argument("player", EntityArgument.player())
                                 .then(Commands.argument("dias", IntegerArgumentType.integer(1, 3650))
                                         .executes(this::renew))))
+                .then(Commands.literal("renovarcomkit")
+                        .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).renew))
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .then(Commands.argument("dias", IntegerArgumentType.integer(1, 3650))
+                                        .executes(this::renewWithKit))))
+                .then(Commands.literal("entregarpermanentes")
+                        .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).grant))
+                        .then(Commands.argument("kit", StringArgumentType.word()).suggests(this::suggestKits)
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(this::deliverPermanent))))
                 .then(Commands.literal("daroffline")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).grant))
                         .then(Commands.argument("kit", StringArgumentType.word()).suggests(this::suggestKits)
@@ -108,6 +118,10 @@ final class VipEvents {
                 .then(Commands.literal("consultar")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).history))
                         .then(Commands.argument("player", EntityArgument.player()).executes(this::inspect)))
+                .then(Commands.literal("remover")
+                        .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).grant))
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .then(Commands.literal("confirmar").executes(this::removeVip))))
                 .then(Commands.literal("historico")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).history))
                         .then(Commands.argument("player", EntityArgument.player())
@@ -294,6 +308,30 @@ final class VipEvents {
         return 1;
     }
 
+    private int renewWithKit(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer staff = ctx.getSource().getPlayerOrException();
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        int days = IntegerArgumentType.getInteger(ctx, "dias");
+        if (!service.renewAndDeliver(staff, target, days)) {
+            ctx.getSource().sendFailure(Component.literal("O jogador não possui VIP ou o kit foi removido.")); return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.literal("✔ VIP renovado e kit entregue novamente.")
+                .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD), true);
+        return 1;
+    }
+
+    private int deliverPermanent(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer staff = ctx.getSource().getPlayerOrException();
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        String kit = StringArgumentType.getString(ctx, "kit");
+        if (!service.deliverPermanentItems(staff, target, kit)) {
+            ctx.getSource().sendFailure(Component.literal("Kit inexistente.")); return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.literal("✔ Somente os itens permanentes foram entregues.")
+                .withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
     private int queueOffline(CommandContext<CommandSourceStack> ctx, int days) throws CommandSyntaxException {
         String nick = StringArgumentType.getString(ctx, "nick");
         OfflinePlayer player = resolveOffline(ctx.getSource(), nick);
@@ -350,6 +388,17 @@ final class VipEvents {
                 .append(Component.literal("\nVencimento: ").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(TIME.format(Instant.ofEpochMilli(profile.expiresAt())))
                         .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)), false);
+        return 1;
+    }
+
+    private int removeVip(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer staff = ctx.getSource().getPlayerOrException();
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        if (!service.removeVip(staff, target)) {
+            ctx.getSource().sendFailure(Component.literal("O jogador não possui VIP registrado.")); return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.literal("VIP removido; itens temporários foram enviados ao cofre.")
+                .withStyle(ChatFormatting.RED, ChatFormatting.BOLD), true);
         return 1;
     }
 

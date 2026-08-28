@@ -120,6 +120,57 @@ final class VipService {
         return true;
     }
 
+    boolean deliverPermanentItems(ServerPlayer staff, ServerPlayer target, String kitName) {
+        VipStore current = store(staff.getServer());
+        VipStore.Kit kit = current.data.kits.get(kitName.toLowerCase());
+        if (kit == null) return false;
+        for (VipStore.KitItem template : kit.items) {
+            if (template.temporary()) continue;
+            ItemStack stack = VipStore.decode(template.encodedStack(), target.registryAccess()).copy();
+            if (!target.getInventory().add(stack)) target.drop(stack, false);
+        }
+        current.addHistory(target.getUUID(), target.getName().getString(), "PERMANENTES_ENTREGUES",
+                "kit: " + kit.name + " | staff: " + staff.getName().getString());
+        current.save();
+        return true;
+    }
+
+    boolean renewAndDeliver(ServerPlayer staff, ServerPlayer target, int days) {
+        if (!renew(staff, target, days)) return false;
+        VipStore current = store(staff.getServer());
+        VipStore.Profile profile = current.data.profiles.get(target.getUUID().toString());
+        VipStore.Kit kit = current.data.kits.get(profile.kit().toLowerCase());
+        if (kit == null) return false;
+        for (VipStore.KitItem template : kit.items) {
+            ItemStack stack = VipStore.decode(template.encodedStack(), target.registryAccess()).copy();
+            if (template.temporary()) VipItemData.attach(stack, target.getUUID(),
+                    target.getName().getString(), kit.name, profile.expiresAt());
+            if (!target.getInventory().add(stack)) target.drop(stack, false);
+        }
+        current.addHistory(target.getUUID(), target.getName().getString(), "VIP_RENOVADO_COM_KIT",
+                days + " dias | staff: " + staff.getName().getString());
+        current.save();
+        return true;
+    }
+
+    boolean removeVip(ServerPlayer staff, ServerPlayer target) {
+        VipStore current = store(staff.getServer());
+        VipStore.Profile removed = current.data.profiles.remove(target.getUUID().toString());
+        if (removed == null) return false;
+        for (ItemStack stack : allPlayerStacks(target)) {
+            VipItemData.read(stack).ifPresent(info -> {
+                if (!info.originalOwner().equals(target.getUUID())) return;
+                current.archive(target.getUUID(), target.getName().getString(), stack.copy(), target.registryAccess());
+                stack.setCount(0);
+            });
+        }
+        current.data.sentWarnings.remove(target.getUUID().toString());
+        current.addHistory(target.getUUID(), target.getName().getString(), "VIP_REMOVIDO",
+                "plano: " + removed.plan() + " | staff: " + staff.getName().getString());
+        current.save();
+        return true;
+    }
+
     boolean queueDelivery(MinecraftServer server, UUID playerId, String playerName,
                           String kitName, int days, String staffName) {
         VipStore current = store(server);
@@ -188,12 +239,24 @@ final class VipService {
         if (++ticks % 20 != 0) return;
         VipStore current = store(currentServer);
         long now = System.currentTimeMillis();
+        normalizeSplitStacks(currentServer);
         for (ServerPlayer player : currentServer.getPlayerList().getPlayers()) {
             scanPlayer(current, player, now);
             sendExpiryWarnings(current, player, now);
         }
         if (ticks % 1200 == 0) scanDroppedItems(currentServer, current, now);
         if (ticks % 1200 == 0) { current.purgeVault(); current.save(); }
+    }
+
+    private void normalizeSplitStacks(MinecraftServer server) {
+        java.util.Set<UUID> seen = new java.util.HashSet<>();
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            for (ItemStack stack : allPlayerStacks(player)) {
+                VipItemData.read(stack).ifPresent(info -> {
+                    if (!seen.add(info.itemId())) seen.add(VipItemData.reidentify(stack));
+                });
+            }
+        }
     }
 
     private void sendExpiryWarnings(VipStore current, ServerPlayer player, long now) {

@@ -27,11 +27,24 @@ Os itens usados como modelo voltam para o inventário da staff depois de salvar.
 - `/vip kit editar <nome>`
 - `/vip kit listar`
 - `/vip kit excluir <nome>`
+- `/vip plano listar`
+- `/vip plano criar <id> <nome>`
+- `/vip plano ativar|desativar <id>`
+- `/vip plano renomear <id> <novo nome>`
 - `/vip dar <kit> <player> [dias]` — padrão de 30 dias.
+- `/vip dar <kit> <player> [dias] confirmar` — substitui um VIP existente conscientemente.
 - `/vip renovar <player> <dias>`
+- `/vip renovarcomkit <player> <dias>` — renova e entrega o kit novamente.
+- `/vip entregarpermanentes <kit> <player>`
+- `/vip remover <player> confirmar`
+- `/vip daroffline <kit> <nick> [dias]` — entrega quando o jogador entrar.
+- `/vip renovaroffline <nick> <dias>`
 - `/vip consultar <player>`
-- `/vip historico <player>`
+- `/vip historico <player> [todos|vip|item|cofre|kit] [pagina]`
 - `/vip cofre <player>` — visualização administrativa dos itens expirados.
+- `/vip cofre <player> restaurar <slot> <dias>`
+- `/vip cofre <player> permanente <slot>`
+- `/vip cofre <player> excluir <slot>`
 
 Os comandos administrativos exigem permission level 2. `/vip kits` e `/vip kit ver` ficam disponíveis para todos. O prefixo antigo `/noverisvip` continua funcionando.
 
@@ -42,6 +55,10 @@ Cada pilha temporária recebe identificação, proprietário original, kit e dat
 Comidas, poções e outros consumíveis mantêm o funcionamento normal: cada uso reduz a quantidade da pilha e o sistema nunca repõe o item consumido. A quantidade entregue é exatamente a quantidade salva no modelo do kit.
 
 O inventário, armadura, mão secundária e Ender Chest dos jogadores conectados são verificados a cada segundo. Ao vencer, o item é retirado e armazenado no cofre administrativo durante sete dias; depois é eliminado do registro. Um item vencido que permaneceu no chão é recolhido pelo sistema assim que entrar novamente no inventário de um jogador.
+
+Itens dropados passam por verificação periódica e recipientes vanilla são verificados quando o chunk é carregado. Pilhas divididas recebem novas identificações de rastreamento, mantendo proprietário, kit e vencimento. Integrações com inventários internos de mods dependem de esses inventários exporem seus itens ao Minecraft/NeoForge.
+
+O jogador recebe avisos configuráveis antes do vencimento. Os padrões são 7, 3 e 1 dia. Níveis de permissão e dias de aviso ficam em `serverconfig/noveris_vip_system-server.toml`.
 
 Os dados ficam em `noveris_vip_system.json`, dentro da pasta do mundo, e sobrevivem a reinicializações.
 

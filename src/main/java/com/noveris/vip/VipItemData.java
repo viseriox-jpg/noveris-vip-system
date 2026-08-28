@@ -65,6 +65,17 @@ final class VipItemData {
         stack.set(DataComponents.LORE, new ItemLore(lines));
     }
 
+    static UUID reidentify(ItemStack stack) {
+        CompoundTag root = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+        if (!root.contains(ROOT)) return null;
+        CompoundTag vip = root.getCompound(ROOT);
+        UUID newId = UUID.randomUUID();
+        vip.putUUID("item_id", newId);
+        root.put(ROOT, vip);
+        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(root));
+        return newId;
+    }
+
     private static void updateLore(ItemStack stack, long expiresAt, boolean replacePrevious) {
         ItemLore current = stack.getOrDefault(DataComponents.LORE, ItemLore.EMPTY);
         List<Component> lines = new ArrayList<>(current.lines());
