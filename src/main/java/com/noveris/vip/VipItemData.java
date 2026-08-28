@@ -76,6 +76,10 @@ final class VipItemData {
         return newId;
     }
 
+    static boolean hasVipTag(ItemStack stack) {
+        return stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag().contains(ROOT);
+    }
+
     private static void updateLore(ItemStack stack, long expiresAt, boolean replacePrevious) {
         ItemLore current = stack.getOrDefault(DataComponents.LORE, ItemLore.EMPTY);
         List<Component> lines = new ArrayList<>(current.lines());

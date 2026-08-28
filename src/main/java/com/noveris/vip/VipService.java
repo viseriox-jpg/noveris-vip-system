@@ -283,6 +283,79 @@ final class VipService {
         }
     }
 
+    Diagnosis diagnose(ServerPlayer target) {
+        VipStore current = store(target.getServer());
+        String key = target.getUUID().toString();
+        VipStore.Profile profile = current.data.profiles.get(key);
+        int temporary = 0;
+        int issues = 0;
+        java.util.Set<UUID> seen = new java.util.HashSet<>();
+        for (ItemStack stack : allPlayerStacks(target)) {
+            VipItemData.Info info = VipItemData.read(stack).orElse(null);
+            if (info == null) {
+                if (VipItemData.hasVipTag(stack)) issues++;
+                continue;
+            }
+            temporary++;
+            if (!seen.add(info.itemId()) || current.data.retiredItemIds.contains(info.itemId().toString())) issues++;
+            VipStore.Profile ownerProfile = current.data.profiles.get(info.originalOwner().toString());
+            if (ownerProfile == null || ownerProfile.expiresAt() != info.expiresAt()) issues++;
+        }
+        long grants = current.data.history.getOrDefault(key, List.of()).stream()
+                .filter(entry -> entry.action().equals("VIP_CONCEDIDO")
+                        || entry.action().equals("VIP_ENTREGUE_AO_ENTRAR")
+                        || entry.action().equals("VIP_RENOVADO_COM_KIT")).count();
+        return new Diagnosis(profile, temporary,
+                current.data.vault.getOrDefault(key, List.of()).size(),
+                current.data.pendingDeliveries.containsKey(key), grants, issues);
+    }
+
+    RepairResult repair(ServerPlayer staff, ServerPlayer target) {
+        VipStore current = store(target.getServer());
+        java.util.Set<UUID> seen = new java.util.HashSet<>();
+        int reidentified = 0, removed = 0, synchronizedItems = 0, invalidMetadata = 0;
+        for (ItemStack stack : allPlayerStacks(target)) {
+            VipItemData.Info info = VipItemData.read(stack).orElse(null);
+            if (info == null) {
+                if (VipItemData.hasVipTag(stack)) {
+                    VipItemData.makePermanent(stack);
+                    invalidMetadata++;
+                }
+                continue;
+            }
+            if (current.data.retiredItemIds.contains(info.itemId().toString())) {
+                stack.setCount(0);
+                removed++;
+                continue;
+            }
+            if (!seen.add(info.itemId())) {
+                UUID newId = VipItemData.reidentify(stack);
+                if (newId != null) seen.add(newId);
+                reidentified++;
+                continue;
+            }
+            VipStore.Profile ownerProfile = current.data.profiles.get(info.originalOwner().toString());
+            if (ownerProfile == null) {
+                current.archive(target.getUUID(), target.getName().getString(), stack.copy(), target.registryAccess());
+                stack.setCount(0);
+                removed++;
+            } else if (ownerProfile.expiresAt() != info.expiresAt()) {
+                VipItemData.renew(stack, ownerProfile.expiresAt());
+                synchronizedItems++;
+            }
+        }
+        current.addHistory(target.getUUID(), target.getName().getString(), "VIP_REPARADO",
+                "IDs renovados: " + reidentified + " | removidos: " + removed
+                        + " | datas corrigidas: " + synchronizedItems + " | metadados limpos: " + invalidMetadata
+                        + " | staff: " + staff.getName().getString());
+        current.save();
+        return new RepairResult(reidentified, removed, synchronizedItems, invalidMetadata);
+    }
+
+    record Diagnosis(VipStore.Profile profile, int temporaryItems, int vaultItems,
+                     boolean pendingDelivery, long deliveredKits, int issues) {}
+    record RepairResult(int reidentified, int removed, int synchronizedItems, int invalidMetadata) {}
+
     private void sendExpiryWarnings(VipStore current, ServerPlayer player, long now) {
         VipStore.Profile profile = current.data.profiles.get(player.getUUID().toString());
         if (profile == null || profile.expiresAt() <= now) return;
@@ -307,6 +380,13 @@ final class VipService {
                 if (!(entity instanceof ItemEntity itemEntity)) continue;
                 ItemStack stack = itemEntity.getItem();
                 VipItemData.read(stack).ifPresent(info -> {
+                    if (current.data.retiredItemIds.contains(info.itemId().toString())) {
+                        itemEntity.discard();
+                        current.addHistory(info.originalOwner(), info.originalOwnerName(), "ITEM_ROLLBACK_BLOQUEADO",
+                                stack.getHoverName().getString() + " | item dropado restaurado");
+                        current.save();
+                        return;
+                    }
                     if (info.expiresAt() > now) return;
                     current.archive(info.originalOwner(), info.originalOwnerName(), stack.copy(), level.registryAccess());
                     itemEntity.discard();
@@ -323,7 +403,13 @@ final class VipService {
         for (int slot = 0; slot < container.getContainerSize(); slot++) {
             ItemStack stack = container.getItem(slot);
             VipItemData.Info info = VipItemData.read(stack).orElse(null);
-            if (info == null || info.expiresAt() > now) continue;
+            if (info == null) continue;
+            if (current.data.retiredItemIds.contains(info.itemId().toString())) {
+                stack.setCount(0);
+                changed = true;
+                continue;
+            }
+            if (info.expiresAt() > now) continue;
             current.archive(info.originalOwner(), info.originalOwnerName(), stack.copy(), server.registryAccess());
             stack.setCount(0);
             changed = true;
@@ -337,6 +423,13 @@ final class VipService {
     private void scanPlayer(VipStore current, ServerPlayer player, long now) {
         for (ItemStack stack : allPlayerStacks(player)) {
             VipItemData.read(stack).ifPresent(info -> {
+                if (current.data.retiredItemIds.contains(info.itemId().toString())) {
+                    current.addHistory(info.originalOwner(), info.originalOwnerName(), "ITEM_ROLLBACK_BLOQUEADO",
+                            stack.getHoverName().getString() + " | portador: " + player.getName().getString());
+                    stack.setCount(0);
+                    current.save();
+                    return;
+                }
                 UUID oldHolder = lastKnownHolder.put(info.itemId(), player.getUUID());
                 if (oldHolder != null && !oldHolder.equals(player.getUUID())) {
                     current.addHistory(player.getUUID(), player.getName().getString(), "ITEM_RECEBIDO",
@@ -388,7 +481,10 @@ final class VipService {
         ItemStack stack = VipStore.decode(entry.encodedStack(), target.registryAccess());
         if (stack.isEmpty()) return VaultResult.INVALID_ITEM;
         if (permanent) VipItemData.makePermanent(stack);
-        else VipItemData.renew(stack, System.currentTimeMillis() + days * 86_400_000L);
+        else {
+            VipItemData.renew(stack, System.currentTimeMillis() + days * 86_400_000L);
+            VipItemData.reidentify(stack);
+        }
         if (!target.getInventory().add(stack)) target.drop(stack, false);
         entries.remove(oneBasedSlot - 1);
         current.addHistory(target.getUUID(), target.getName().getString(),

@@ -11,6 +11,8 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
@@ -39,6 +41,13 @@ final class VipEvents {
 
     private LiteralArgumentBuilder<CommandSourceStack> commandRoot(String root) {
         return Commands.literal(root)
+                .executes(this::help)
+                .then(Commands.literal("ajuda").executes(this::help))
+                .then(Commands.literal("cancelar").executes(ctx -> {
+                    ctx.getSource().sendSuccess(() -> Component.literal("Operação cancelada.")
+                            .withStyle(ChatFormatting.GRAY), false);
+                    return 1;
+                }))
                 .then(Commands.literal("kits").executes(this::listPublicKits))
                 .then(Commands.literal("plano")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).kitManage))
@@ -76,7 +85,8 @@ final class VipEvents {
                         .then(Commands.literal("excluir")
                                 .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).kitManage))
                                 .then(Commands.argument("nome", StringArgumentType.word())
-                                        .suggests(this::suggestKits).executes(this::deleteKit))))
+                                        .suggests(this::suggestKits).executes(this::requestDeleteKit)
+                                        .then(Commands.literal("confirmar").executes(this::deleteKit)))))
                 .then(Commands.literal("dar")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).grant))
                         .then(Commands.argument("kit", StringArgumentType.word()).suggests(this::suggestKits)
@@ -118,9 +128,16 @@ final class VipEvents {
                 .then(Commands.literal("consultar")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).history))
                         .then(Commands.argument("player", EntityArgument.player()).executes(this::inspect)))
+                .then(Commands.literal("diagnostico")
+                        .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).history))
+                        .then(Commands.argument("player", EntityArgument.player()).executes(this::diagnose)))
+                .then(Commands.literal("reparar")
+                        .requires(source -> source.hasPermission(4))
+                        .then(Commands.argument("player", EntityArgument.player()).executes(this::repair)))
                 .then(Commands.literal("remover")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).grant))
                         .then(Commands.argument("player", EntityArgument.player())
+                                .executes(this::requestRemoveVip)
                                 .then(Commands.literal("confirmar").executes(this::removeVip))))
                 .then(Commands.literal("historico")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).history))
@@ -135,6 +152,11 @@ final class VipEvents {
                                                 .executes(ctx -> history(ctx,
                                                         StringArgumentType.getString(ctx, "filtro"),
                                                         IntegerArgumentType.getInteger(ctx, "pagina")))))))
+                .then(Commands.literal("apagarhistorico")
+                        .requires(source -> source.hasPermission(4))
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(this::requestClearHistory)
+                                .then(Commands.literal("confirmar").executes(this::clearHistory))))
                 .then(Commands.literal("cofre")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).vault))
                         .then(Commands.argument("player", EntityArgument.player()).executes(this::vault)
@@ -148,6 +170,48 @@ final class VipEvents {
                                 .then(Commands.literal("excluir")
                                         .then(Commands.argument("slot", IntegerArgumentType.integer(1, 54))
                                                 .executes(this::deleteVault)))));
+    }
+
+    private int help(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack source = ctx.getSource();
+        VipConfig config = VipConfig.load(source.getServer());
+        source.sendSuccess(() -> Component.literal("✦ AJUDA — SISTEMA VIP ✦")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), false);
+        helpLine(source, "/vip kits", "Ver os kits disponíveis", "/vip kits");
+        helpLine(source, "/vip kit ver <nome>", "Visualizar um kit", "/vip kit ver ");
+        if (source.hasPermission(config.kitManage)) {
+            helpLine(source, "/vip kit criar <nome> <plano>", "Criar um kit", "/vip kit criar ");
+            helpLine(source, "/vip kit editar <nome>", "Editar um kit", "/vip kit editar ");
+        }
+        if (source.hasPermission(config.grant)) {
+            helpLine(source, "/vip dar <kit> <player> [dias]", "Entregar VIP", "/vip dar ");
+            helpLine(source, "/vip remover <player>", "Remover VIP", "/vip remover ");
+        }
+        if (source.hasPermission(config.renew))
+            helpLine(source, "/vip renovar <player> <dias>", "Renovar VIP", "/vip renovar ");
+        if (source.hasPermission(config.history)) {
+            helpLine(source, "/vip diagnostico <player>", "Diagnóstico completo", "/vip diagnostico ");
+            helpLine(source, "/vip historico <player>", "Consultar auditoria", "/vip historico ");
+        }
+        if (source.hasPermission(config.vault))
+            helpLine(source, "/vip cofre <player>", "Abrir o cofre", "/vip cofre ");
+        if (source.hasPermission(4)) {
+            helpLine(source, "/vip reparar <player>", "Corrigir inconsistências", "/vip reparar ");
+            helpLine(source, "/vip apagarhistorico <player>", "Apagar histórico", "/vip apagarhistorico ");
+        }
+        source.sendSuccess(() -> Component.literal("Clique em um comando para colocá-lo no chat.")
+                .withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC), false);
+        return 1;
+    }
+
+    private void helpLine(CommandSourceStack source, String command, String description, String suggestion) {
+        source.sendSuccess(() -> Component.literal("• ").withStyle(ChatFormatting.DARK_GRAY)
+                .append(Component.literal(command).withStyle(style -> style
+                        .withColor(ChatFormatting.AQUA).withUnderlined(true)
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, suggestion))
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                Component.literal("Clique para preencher")))))
+                .append(Component.literal(" — " + description).withStyle(ChatFormatting.GRAY)), false);
     }
 
     private int listPublicKits(CommandContext<CommandSourceStack> ctx) {
@@ -258,6 +322,17 @@ final class VipEvents {
         return listPublicKits(ctx);
     }
 
+    private int requestDeleteKit(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "nome").toLowerCase();
+        if (!service.data(ctx.getSource().getServer()).data.kits.containsKey(name)) {
+            ctx.getSource().sendFailure(Component.literal("Kit inexistente."));
+            return 0;
+        }
+        sendConfirmation(ctx.getSource(), "Excluir definitivamente o kit " + name + "?",
+                "/vip kit excluir " + name + " confirmar");
+        return 1;
+    }
+
     private int deleteKit(CommandContext<CommandSourceStack> ctx) {
         String name = StringArgumentType.getString(ctx, "nome").toLowerCase();
         VipStore store = service.data(ctx.getSource().getServer());
@@ -276,10 +351,9 @@ final class VipEvents {
         VipStore.Profile existing = service.data(ctx.getSource().getServer()).data.profiles
                 .get(target.getUUID().toString());
         if (!confirmed && existing != null && existing.expiresAt() > System.currentTimeMillis()) {
-            ctx.getSource().sendFailure(Component.literal("⚠ " + target.getName().getString()
-                    + " já possui o plano " + existing.plan() + ". Use /vip dar " + kit + " "
-                    + target.getName().getString() + " " + days + " confirmar para substituir.")
-                    .withStyle(ChatFormatting.YELLOW));
+            sendConfirmation(ctx.getSource(), target.getName().getString() + " já possui o plano "
+                    + existing.plan() + ". Substituir pelo kit " + kit + "?", "/vip dar " + kit + " "
+                    + target.getName().getString() + " " + days + " confirmar");
             return 0;
         }
         if (!service.grant(staff, target, kit, days)) {
@@ -391,6 +465,75 @@ final class VipEvents {
         return 1;
     }
 
+    private int diagnose(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        VipService.Diagnosis diagnosis = service.diagnose(target);
+        VipStore.Profile profile = diagnosis.profile();
+        Component report = Component.literal("✦ DIAGNÓSTICO VIP — ")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
+                .append(target.getDisplayName().copy().withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD));
+        if (profile == null) {
+            report.append(Component.literal("\nPlano atual: nenhum").withStyle(ChatFormatting.RED));
+        } else {
+            long remaining = Math.max(0, profile.expiresAt() - System.currentTimeMillis());
+            report.append(Component.literal("\nPlano atual: ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal(profile.plan()).withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD))
+                    .append(Component.literal("  |  Kit: ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal(profile.kit()).withStyle(ChatFormatting.AQUA))
+                    .append(Component.literal("\nInício: ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal(TIME.format(Instant.ofEpochMilli(profile.grantedAt())))
+                            .withStyle(ChatFormatting.WHITE))
+                    .append(Component.literal("  |  Vencimento: ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal(TIME.format(Instant.ofEpochMilli(profile.expiresAt())))
+                            .withStyle(ChatFormatting.YELLOW))
+                    .append(Component.literal("\nTempo restante: ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal(formatDuration(remaining)).withStyle(ChatFormatting.GREEN));
+        }
+        report.append(Component.literal("\nKits recebidos: ").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(String.valueOf(diagnosis.deliveredKits())).withStyle(ChatFormatting.AQUA))
+                .append(Component.literal("  |  Itens temporários ativos: ").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(String.valueOf(diagnosis.temporaryItems())).withStyle(ChatFormatting.YELLOW))
+                .append(Component.literal("\nItens arquivados: ").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(String.valueOf(diagnosis.vaultItems())).withStyle(ChatFormatting.GOLD))
+                .append(Component.literal("  |  Entrega pendente: ").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(diagnosis.pendingDelivery() ? "sim" : "não")
+                        .withStyle(diagnosis.pendingDelivery() ? ChatFormatting.YELLOW : ChatFormatting.GREEN))
+                .append(Component.literal("\nPossíveis inconsistências: ").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(String.valueOf(diagnosis.issues())).withStyle(
+                        diagnosis.issues() == 0 ? ChatFormatting.GREEN : ChatFormatting.RED, ChatFormatting.BOLD));
+        ctx.getSource().sendSuccess(() -> report, false);
+        return 1;
+    }
+
+    private String formatDuration(long millis) {
+        long totalHours = millis / 3_600_000L;
+        long days = totalHours / 24;
+        long hours = totalHours % 24;
+        return days + " dia(s) e " + hours + " hora(s)";
+    }
+
+    private int repair(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer staff = ctx.getSource().getPlayerOrException();
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        VipService.RepairResult result = service.repair(staff, target);
+        ctx.getSource().sendSuccess(() -> Component.literal("✔ REPARO CONCLUÍDO — ")
+                .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD)
+                .append(target.getDisplayName().copy().withStyle(ChatFormatting.AQUA))
+                .append(Component.literal("\nIDs duplicados corrigidos: " + result.reidentified()
+                        + " | cópias inválidas removidas: " + result.removed()
+                        + "\nDatas sincronizadas: " + result.synchronizedItems()
+                        + " | metadados inválidos limpos: " + result.invalidMetadata())
+                        .withStyle(ChatFormatting.GRAY)), true);
+        return 1;
+    }
+
+    private int requestRemoveVip(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        sendConfirmation(ctx.getSource(), "Remover o VIP e arquivar os itens temporários de "
+                + target.getName().getString() + "?", "/vip remover " + target.getName().getString() + " confirmar");
+        return 1;
+    }
+
     private int removeVip(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer staff = ctx.getSource().getPlayerOrException();
         ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
@@ -400,6 +543,41 @@ final class VipEvents {
         ctx.getSource().sendSuccess(() -> Component.literal("VIP removido; itens temporários foram enviados ao cofre.")
                 .withStyle(ChatFormatting.RED, ChatFormatting.BOLD), true);
         return 1;
+    }
+
+    private int requestClearHistory(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        sendConfirmation(ctx.getSource(), "Apagar definitivamente todo o histórico de "
+                + target.getName().getString() + "?", "/vip apagarhistorico "
+                + target.getName().getString() + " confirmar");
+        return 1;
+    }
+
+    private int clearHistory(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        ServerPlayer staff = ctx.getSource().getPlayerOrException();
+        VipStore store = service.data(ctx.getSource().getServer());
+        int removed = store.clearHistory(target.getUUID());
+        store.addHistory(staff.getUUID(), staff.getName().getString(), "HISTORICO_APAGADO",
+                target.getName().getString() + " | " + removed + " registro(s)");
+        store.save();
+        ctx.getSource().sendSuccess(() -> Component.literal("✔ Histórico de " + target.getName().getString()
+                + " apagado: " + removed + " registro(s).").withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD), true);
+        return 1;
+    }
+
+    private void sendConfirmation(CommandSourceStack source, String warning, String confirmCommand) {
+        Component confirm = Component.literal("[CONFIRMAR]").withStyle(style -> style
+                .withColor(ChatFormatting.GREEN).withBold(true)
+                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, confirmCommand))
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Executar operação"))));
+        Component cancel = Component.literal("[CANCELAR]").withStyle(style -> style
+                .withColor(ChatFormatting.RED).withBold(true)
+                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/vip cancelar"))
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Cancelar operação"))));
+        source.sendSuccess(() -> Component.literal("⚠ " + warning + "\n")
+                .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)
+                .append(confirm).append(Component.literal("  ")).append(cancel), false);
     }
 
     private int history(CommandContext<CommandSourceStack> ctx, String filter, int page) throws CommandSyntaxException {

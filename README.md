@@ -21,6 +21,7 @@ Os itens usados como modelo voltam para o inventário da staff depois de salvar.
 
 ## Comandos
 
+- `/vip ajuda` — mostra somente os comandos permitidos, com exemplos clicáveis.
 - `/vip kits` — público; lista kits, planos e quantidades.
 - `/vip kit ver <nome>` — público; abre uma visualização do kit.
 - `/vip kit criar <nome> <plano>`
@@ -40,7 +41,10 @@ Os itens usados como modelo voltam para o inventário da staff depois de salvar.
 - `/vip daroffline <kit> <nick> [dias]` — entrega quando o jogador entrar.
 - `/vip renovaroffline <nick> <dias>`
 - `/vip consultar <player>`
+- `/vip diagnostico <player>` — resume plano, prazo, itens, cofre, entregas e inconsistências.
+- `/vip reparar <player>` — OP 4; corrige IDs, datas e registros órfãos.
 - `/vip historico <player> [todos|vip|item|cofre|kit] [pagina]`
+- `/vip apagarhistorico <player>` — OP 4; exige confirmação clicável.
 - `/vip cofre <player>` — visualização administrativa dos itens expirados.
 - `/vip cofre <player> restaurar <slot> <dias>`
 - `/vip cofre <player> permanente <slot>`
@@ -61,6 +65,8 @@ Itens dropados passam por verificação periódica. Recipientes vanilla encontra
 O jogador recebe avisos configuráveis antes do vencimento. Os padrões são 7, 3 e 1 dia. Níveis de permissão e dias de aviso ficam em `serverconfig/noveris_vip_system-server.toml`.
 
 Os dados ficam em `noveris_vip_system.json`, dentro da pasta do mundo, e sobrevivem a reinicializações.
+Identificadores de itens já arquivados também são preservados. Se uma restauração de backup fizer uma cópia
+antiga reaparecer, ela é bloqueada e a ocorrência entra no histórico como proteção contra duplicação.
 
 ## Plataforma e build
 

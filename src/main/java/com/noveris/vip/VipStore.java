@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.UUID;
+import java.util.HashSet;
+import java.util.Set;
 
 final class VipStore {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -58,12 +60,18 @@ final class VipStore {
 
     void archive(UUID holder, String holderName, ItemStack stack, HolderLookup.Provider registries) {
         VipItemData.Info info = VipItemData.read(stack).orElseThrow();
+        data.retiredItemIds.add(info.itemId().toString());
         data.vault.computeIfAbsent(holder.toString(), ignored -> new ArrayList<>()).add(
                 new VaultEntry(encode(stack, registries), System.currentTimeMillis(),
                         System.currentTimeMillis() + VAULT_RETENTION_MS, info.originalOwnerName(), info.kit()));
         addHistory(holder, holderName, "ITEM_EXPIRADO", stack.getHoverName().getString() + " | kit: " + info.kit());
         if (!holder.equals(info.originalOwner())) addHistory(info.originalOwner(), info.originalOwnerName(),
                 "ITEM_EXPIRADO_COM_TERCEIRO", stack.getHoverName().getString() + " | portador: " + holderName);
+    }
+
+    int clearHistory(UUID playerId) {
+        List<HistoryEntry> removed = data.history.remove(playerId.toString());
+        return removed == null ? 0 : removed.size();
     }
 
     void purgeVault() {
@@ -97,6 +105,7 @@ final class VipStore {
         Map<String, PlanDefinition> plans;
         Map<String, PendingDelivery> pendingDeliveries;
         Map<String, List<Integer>> sentWarnings;
+        Set<String> retiredItemIds;
         Data normalize() {
             if (kits == null) kits = new HashMap<>();
             if (profiles == null) profiles = new HashMap<>();
@@ -111,6 +120,7 @@ final class VipStore {
             }
             if (pendingDeliveries == null) pendingDeliveries = new HashMap<>();
             if (sentWarnings == null) sentWarnings = new HashMap<>();
+            if (retiredItemIds == null) retiredItemIds = new HashSet<>();
             return this;
         }
     }
