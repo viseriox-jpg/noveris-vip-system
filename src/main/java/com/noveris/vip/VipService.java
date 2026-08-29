@@ -45,41 +45,26 @@ final class VipService {
         VipStore current = store(staff.getServer());
         SimpleContainer editor = new SimpleContainer(54);
         VipStore.Kit existing = current.data.kits.get(kitName.toLowerCase());
-        if (existing != null) {
-            int temporarySlot = KitEditorMenu.TEMPORARY_FROM;
-            int permanentSlot = KitEditorMenu.PERMANENT_FROM;
-            for (VipStore.KitItem item : existing.items) {
-                int slot = item.temporary() ? temporarySlot++ : permanentSlot++;
-                if (slot <= (item.temporary() ? KitEditorMenu.TEMPORARY_TO : KitEditorMenu.PERMANENT_TO)) editor.setItem(slot,
-                        VipStore.decode(item.encodedStack(), staff.registryAccess()).copy());
-            }
-        }
         MenuProvider provider = new SimpleMenuProvider((id, inventory, player) ->
-                new KitEditorMenu(id, inventory, editor, this, kitName.toLowerCase(), plan),
+                new KitEditorMenu(id, inventory, editor, this, kitName.toLowerCase(), plan, existing),
                 Component.literal("Editor VIP — " + kitName));
         staff.openMenu(provider);
     }
 
-    void saveKit(ServerPlayer staff, String kitName, String plan, SimpleContainer editor) {
+    void saveKit(ServerPlayer staff, String kitName, String plan,
+                 List<ItemStack> temporary, List<ItemStack> permanent) {
         VipStore current = store(staff.getServer());
         VipStore.Kit kit = new VipStore.Kit(kitName, plan);
-        saveRange(staff, editor, kit, KitEditorMenu.TEMPORARY_FROM, KitEditorMenu.TEMPORARY_TO, true);
-        saveRange(staff, editor, kit, KitEditorMenu.PERMANENT_FROM, KitEditorMenu.PERMANENT_TO, false);
+        temporary.stream().filter(stack -> !stack.isEmpty()).forEach(stack -> kit.items.add(
+                new VipStore.KitItem(VipStore.encode(stack.copy(), staff.registryAccess()), true)));
+        permanent.stream().filter(stack -> !stack.isEmpty()).forEach(stack -> kit.items.add(
+                new VipStore.KitItem(VipStore.encode(stack.copy(), staff.registryAccess()), false)));
         current.data.kits.put(kitName.toLowerCase(), kit);
         current.addHistory(staff.getUUID(), staff.getName().getString(), "KIT_SALVO",
                 kitName + " | plano: " + plan + " | itens: " + kit.items.size());
         current.save();
         staff.sendSystemMessage(Component.literal("Kit " + kitName + " salvo com "
                 + kit.items.size() + " pilhas de itens.").withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
-    }
-
-    private void saveRange(ServerPlayer staff, SimpleContainer editor, VipStore.Kit kit,
-                           int from, int to, boolean temporary) {
-        for (int slot = from; slot <= to; slot++) {
-            ItemStack stack = editor.getItem(slot);
-            if (!stack.isEmpty()) kit.items.add(new VipStore.KitItem(
-                    VipStore.encode(stack.copy(), staff.registryAccess()), temporary));
-        }
     }
 
     void openChoiceCategoryEditor(ServerPlayer staff, String name, int limit) {
@@ -779,28 +764,8 @@ final class VipService {
         VipStore.Kit kit = store(player.getServer()).data.kits.get(kitName.toLowerCase());
         if (kit == null) return false;
         SimpleContainer preview = new SimpleContainer(54);
-        fillHeader(preview, 0, Items.ORANGE_STAINED_GLASS_PANE,
-                "ITENS TEMPORÁRIOS — duram enquanto o VIP estiver ativo", ChatFormatting.GOLD);
-        fillHeader(preview, 27, Items.LIGHT_BLUE_STAINED_GLASS_PANE,
-                "ITENS PERMANENTES — continuam após o VIP", ChatFormatting.AQUA);
-        int temporarySlot = KitEditorMenu.TEMPORARY_FROM;
-        int permanentSlot = KitEditorMenu.PERMANENT_FROM;
-        for (VipStore.KitItem item : kit.items) {
-            int slot = item.temporary() ? temporarySlot++ : permanentSlot++;
-            int limit = item.temporary() ? KitEditorMenu.TEMPORARY_TO : KitEditorMenu.PERMANENT_TO;
-            if (slot <= limit) preview.setItem(slot, VipStore.decode(item.encodedStack(), player.registryAccess()));
-        }
-        player.openMenu(new SimpleMenuProvider((id, inv, ignored) -> new VaultViewMenu(id, inv, preview),
+        player.openMenu(new SimpleMenuProvider((id, inv, ignored) -> new KitPreviewMenu(id, inv, preview, kit),
                 Component.literal("Kit " + kit.name + " — " + kit.plan)));
         return true;
-    }
-
-    private void fillHeader(SimpleContainer inventory, int from, net.minecraft.world.item.Item item,
-                            String label, ChatFormatting color) {
-        for (int slot = from; slot < from + 9; slot++) {
-            ItemStack marker = new ItemStack(item);
-            marker.set(DataComponents.CUSTOM_NAME, Component.literal(label).withStyle(color, ChatFormatting.BOLD));
-            inventory.setItem(slot, marker);
-        }
     }
 }

@@ -11,13 +11,13 @@ Sistema administrativo de planos VIP, kits configuráveis, itens temporários tr
 
 ## Criação de kits
 
-Use `/vip kit criar <nome> <plano>`. A interface possui seis linhas:
+Use `/vip kit criar <nome> <plano>`. A interface oferece 45 espaços por página e dois modos:
 
-- cabeçalho laranja e duas linhas: itens temporários, vinculados ao prazo do VIP;
-- cabeçalho azul e duas linhas: itens permanentes;
-- botões **SALVAR KIT** e **CANCELAR** no cabeçalho azul.
+- itens temporários, vinculados ao prazo do VIP;
+- itens permanentes, que não expiram;
+- páginas ilimitadas em ambos os modos.
 
-Os itens usados como modelo voltam para o inventário da staff depois de salvar. Kits existentes podem ser alterados com `/vip kit editar <nome>`.
+Alterne o modo pelo botão da linha inferior e navegue com as setas. Os itens usados como modelo voltam para o inventário da staff depois de salvar. Kits existentes podem ser alterados com `/vip kit editar <nome>`.
 
 ## Catálogo de escolhas
 
