@@ -19,8 +19,9 @@ import java.util.List;
 
 final class KitPreviewMenu extends ChestMenu {
     private static final int ITEMS_PER_PAGE = 45;
-    private static final int PREVIOUS_SLOT = 45, PAGE_SLOT = 46, MODE_SLOT = 47, BACK_SLOT = 48;
-    private static final int NEXT_SLOT = 52, CLOSE_SLOT = 53;
+    private static final int PREVIOUS_SLOT = 45, TEMPORARY_SLOT = 46, PERMANENT_SLOT = 47;
+    private static final int CHOICES_SLOT = 48, INFORMATION_SLOT = 49, PAGE_SLOT = 50;
+    private static final int BACK_SLOT = 51, NEXT_SLOT = 52, CLOSE_SLOT = 53;
     private final SimpleContainer display;
     private final Inventory inventory;
     private final VipStore store;
@@ -61,11 +62,18 @@ final class KitPreviewMenu extends ChestMenu {
         else if (mode == 2) showChoices();
         else showInformation();
         for (int slot = 45; slot < 54; slot++) control(slot, Items.BLACK_STAINED_GLASS_PANE, "Vitrine VIP", ChatFormatting.GRAY);
-        control(PREVIOUS_SLOT, Items.ARROW, "← ANTERIOR", ChatFormatting.AQUA);
+        navigation(PREVIOUS_SLOT, page > 0, "← ANTERIOR");
+        tab(TEMPORARY_SLOT, Items.CLOCK, "TEMPORÁRIOS", ChatFormatting.GOLD, 0,
+                temporary.size() + " pilha(s) enquanto o VIP estiver ativo");
+        tab(PERMANENT_SLOT, Items.DIAMOND, "PERMANENTES", ChatFormatting.AQUA, 1,
+                permanent.size() + " pilha(s) que não expiram");
+        tab(CHOICES_SLOT, Items.CHEST, "ESCOLHAS", ChatFormatting.LIGHT_PURPLE, 2,
+                categories.size() + " categoria(s) vinculada(s)");
+        tab(INFORMATION_SLOT, Items.NETHER_STAR, "INFORMAÇÕES", ChatFormatting.YELLOW, 3,
+                "Resumo completo do plano");
         control(PAGE_SLOT, Items.PAPER, "PÁGINA " + (page + 1) + "/" + pages(), ChatFormatting.YELLOW);
-        control(MODE_SLOT, modeItem(), modeName(), modeColor());
         if (openCategory != null) control(BACK_SLOT, Items.OAK_DOOR, "VOLTAR ÀS CATEGORIAS", ChatFormatting.YELLOW);
-        control(NEXT_SLOT, Items.ARROW, "PRÓXIMA →", ChatFormatting.AQUA);
+        navigation(NEXT_SLOT, page + 1 < pages(), "PRÓXIMA →");
         control(CLOSE_SLOT, Items.BARRIER, "FECHAR", ChatFormatting.RED);
         broadcastChanges();
     }
@@ -83,12 +91,18 @@ final class KitPreviewMenu extends ChestMenu {
                 String name = categories.get(offset + slot);
                 VipStore.ChoiceCategory category = store.data.choiceCategories.get(name);
                 if (category == null) continue;
-                ItemStack icon = new ItemStack(Items.CHEST);
+                long temporaryOptions = category.items.stream().filter(VipStore.ChoiceItem::temporary).count();
+                ItemStack icon = category.items.isEmpty() ? new ItemStack(Items.CHEST)
+                        : VipStore.decode(category.items.getFirst().encodedStack(), inventory.player.registryAccess()).copy();
+                icon.setCount(1);
                 icon.set(DataComponents.CUSTOM_NAME, Component.literal(name.toUpperCase())
                         .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
                 icon.set(DataComponents.LORE, new ItemLore(List.of(
                         Component.literal("Escolha " + category.limit + " opção(ões)").withStyle(ChatFormatting.YELLOW),
                         Component.literal(category.items.size() + " opções disponíveis").withStyle(ChatFormatting.GRAY),
+                        Component.literal("⌛ " + temporaryOptions + " temporárias  ◆ "
+                                + (category.items.size() - temporaryOptions) + " permanentes")
+                                .withStyle(ChatFormatting.AQUA),
                         Component.literal("Clique para visualizar").withStyle(ChatFormatting.AQUA))));
                 display.setItem(slot, icon);
             }
@@ -124,16 +138,23 @@ final class KitPreviewMenu extends ChestMenu {
         display.setItem(22, info);
     }
 
-    private net.minecraft.world.item.Item modeItem() {
-        return switch (mode) { case 0 -> Items.CLOCK; case 1 -> Items.DIAMOND; case 2 -> Items.CHEST; default -> Items.NETHER_STAR; };
+    private void tab(int slot, net.minecraft.world.item.Item item, String name, ChatFormatting color,
+                     int tabMode, String description) {
+        ItemStack stack = new ItemStack(item);
+        boolean active = mode == tabMode;
+        stack.set(DataComponents.CUSTOM_NAME, Component.literal((active ? "✔ " : "") + name)
+                .withStyle(active ? ChatFormatting.GREEN : color, ChatFormatting.BOLD));
+        stack.set(DataComponents.LORE, new ItemLore(List.of(
+                Component.literal(description).withStyle(ChatFormatting.GRAY),
+                Component.literal(active ? "Seção atual" : "Clique para abrir")
+                        .withStyle(active ? ChatFormatting.GREEN : ChatFormatting.AQUA))));
+        if (active) stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
+        display.setItem(slot, stack);
     }
-    private String modeName() {
-        return switch (mode) { case 0 -> "TEMPORÁRIOS"; case 1 -> "PERMANENTES"; case 2 -> openCategory == null
-                ? "ESCOLHAS" : "ESCOLHAS: " + openCategory; default -> "INFORMAÇÕES"; };
-    }
-    private ChatFormatting modeColor() {
-        return switch (mode) { case 0 -> ChatFormatting.GOLD; case 1 -> ChatFormatting.AQUA;
-            case 2 -> ChatFormatting.LIGHT_PURPLE; default -> ChatFormatting.YELLOW; };
+
+    private void navigation(int slot, boolean enabled, String name) {
+        control(slot, enabled ? Items.ARROW : Items.GRAY_DYE,
+                enabled ? name : "SEM OUTRA PÁGINA", enabled ? ChatFormatting.AQUA : ChatFormatting.DARK_GRAY);
     }
     private void control(int slot, net.minecraft.world.item.Item item, String name, ChatFormatting color) {
         ItemStack stack = new ItemStack(item);
@@ -150,7 +171,13 @@ final class KitPreviewMenu extends ChestMenu {
         }
         if (slotId == PREVIOUS_SLOT && page > 0) { page--; rebuild(); return; }
         if (slotId == NEXT_SLOT && page + 1 < pages()) { page++; rebuild(); return; }
-        if (slotId == MODE_SLOT) { mode = (mode + 1) % 4; page = 0; openCategory = null; rebuild(); return; }
+        if (slotId >= TEMPORARY_SLOT && slotId <= INFORMATION_SLOT) {
+            mode = slotId - TEMPORARY_SLOT;
+            page = 0;
+            openCategory = null;
+            rebuild();
+            return;
+        }
         if (slotId == BACK_SLOT && openCategory != null) { openCategory = null; page = 0; rebuild(); return; }
         if (slotId == CLOSE_SLOT) { serverPlayer.closeContainer(); return; }
         if (slotId >= 0 && slotId < 54) return;
