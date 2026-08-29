@@ -90,6 +90,23 @@ antiga reaparecer, ela é bloqueada e a ocorrência entra no histórico como pro
 
 As mensagens destinadas aos jogadores usam uma linguagem de títulos, concessões e relíquias adequada ao roleplay. Diagnósticos, erros técnicos e confirmações administrativas permanecem objetivos para a staff.
 
+## Relíquias temporárias de lore
+
+Segure o item na mão principal e use:
+
+- `/nlore temporario <player> <duração> [vinculado|transferivel] [motivo]` — entrega uma cópia temporária;
+- `/nlore temporario mao <duração> [modo] [motivo]` — transforma o item segurado;
+- `/nlore revogar <player> <início-do-selo>` — revoga antecipadamente uma relíquia;
+- `/nlore historico <player>` — mostra concessões, transferências, drops e recolhimentos;
+- `/nlore cofre <player>` — abre as relíquias recolhidas;
+- `/nlore cofre <player> restaurar <slot> <duração>` — restaura com novo prazo;
+- `/nlore cofre <player> manter <slot>` — restaura como item permanente;
+- `/nlore cofre <player> excluir <slot>` — exclui definitivamente.
+
+Durações aceitam `s`, `m`, `h` e `d`, por exemplo `30m`, `12h` e `7d`. O modo padrão é **vinculado**. Relíquias transferíveis mantêm o mesmo vencimento ao mudar de portador; vinculadas são recolhidas ao cair em mãos diferentes. O tempo continua correndo enquanto o jogador está offline.
+
+Ao vencer, a relíquia desaparece com mensagem, som e partículas e fica no cofre de lore por sete dias. Cada item possui um selo único, histórico independente e proteção contra cópias restauradas por rollback. Comidas e outros consumíveis continuam reduzindo sua pilha normalmente.
+
 ## Plataforma e build
 
 - Minecraft 1.21.1

@@ -9,5 +9,8 @@ import org.slf4j.Logger;
 public final class NoverisVipSystem {
     public static final String MOD_ID = "noveris_vip_system";
     static final Logger LOGGER = LogUtils.getLogger();
-    public NoverisVipSystem() { NeoForge.EVENT_BUS.register(new VipEvents()); }
+    public NoverisVipSystem() {
+        NeoForge.EVENT_BUS.register(new VipEvents());
+        NeoForge.EVENT_BUS.register(new LoreEvents());
+    }
 }
