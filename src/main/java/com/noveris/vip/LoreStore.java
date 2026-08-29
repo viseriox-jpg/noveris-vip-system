@@ -48,6 +48,11 @@ final class LoreStore {
         if (entries.size() > 250) entries.subList(0, entries.size() - 250).clear();
     }
 
+    int clearHistory(UUID player) {
+        List<Entry> removed = data.history.remove(player.toString());
+        return removed == null ? 0 : removed.size();
+    }
+
     void archive(ItemStack stack, HolderLookup.Provider registries, String cause) {
         LoreItemData.Info info = LoreItemData.read(stack).orElseThrow();
         long now = System.currentTimeMillis();

@@ -99,6 +99,7 @@ Segure o item na mão principal e use:
 - `/nlore temporario mao <duração> [modo] [motivo]` — transforma o item segurado;
 - `/nlore revogar <player> <início-do-selo>` — revoga antecipadamente uma relíquia;
 - `/nlore historico <player>` — mostra concessões, transferências, drops e recolhimentos;
+- `/nlore historico apagar <player>` — OP 4; apaga os registros após confirmação;
 - `/nlore cofre <player>` — abre as relíquias recolhidas;
 - `/nlore cofre <player> restaurar <slot> <duração>` — restaura com novo prazo;
 - `/nlore cofre <player> manter <slot>` — restaura como item permanente;

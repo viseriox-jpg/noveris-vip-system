@@ -9,6 +9,8 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -33,6 +35,11 @@ final class LoreEvents {
         event.getDispatcher().register(Commands.literal("nlore")
                 .executes(this::help)
                 .then(Commands.literal("ajuda").executes(this::help))
+                .then(Commands.literal("cancelar").executes(ctx -> {
+                    ctx.getSource().sendSuccess(() -> Component.literal("Operação cancelada.")
+                            .withStyle(ChatFormatting.GRAY), false);
+                    return 1;
+                }))
                 .then(Commands.literal("temporario")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).grant))
                         .then(Commands.literal("mao")
@@ -56,6 +63,10 @@ final class LoreEvents {
                                 .then(Commands.argument("id", StringArgumentType.word()).executes(this::revoke))))
                 .then(Commands.literal("historico")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).history))
+                        .then(Commands.literal("apagar").requires(source -> source.hasPermission(4))
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(this::requestClearHistory)
+                                        .then(Commands.literal("confirmar").executes(this::clearHistory))))
                         .then(Commands.argument("player", EntityArgument.player()).executes(this::history)))
                 .then(Commands.literal("cofre")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).vault))
@@ -79,7 +90,8 @@ final class LoreEvents {
                         .withStyle(ChatFormatting.AQUA))
                 .append(Component.literal("/nlore temporario mao <duração> [modo] [motivo]\n").withStyle(ChatFormatting.AQUA))
                 .append(Component.literal("/nlore revogar <player> <início-do-id>\n").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal("/nlore historico <player>\n/nlore cofre <player>").withStyle(ChatFormatting.AQUA)), false);
+                .append(Component.literal("/nlore historico <player>\n/nlore historico apagar <player>\n/nlore cofre <player>")
+                        .withStyle(ChatFormatting.AQUA)), false);
         return 1;
     }
 
@@ -147,6 +159,40 @@ final class LoreEvents {
                         .append(Component.literal(entry.action().replace('_', ' ')).withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
                         .append(Component.literal("\n  " + entry.detail()).withStyle(ChatFormatting.GRAY)), false));
         return entries.size();
+    }
+
+    private int requestClearHistory(CommandContext<CommandSourceStack> ctx)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        String command = "/nlore historico apagar " + target.getName().getString() + " confirmar";
+        Component confirm = Component.literal("[CONFIRMAR]").withStyle(style -> style
+                .withColor(ChatFormatting.GREEN).withBold(true)
+                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command))
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                        Component.literal("Apagar definitivamente"))));
+        Component cancel = Component.literal("[CANCELAR]").withStyle(style -> style
+                .withColor(ChatFormatting.RED).withBold(true)
+                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/nlore cancelar"))
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                        Component.literal("Manter o histórico"))));
+        ctx.getSource().sendSuccess(() -> Component.literal("⚠ Apagar todo o histórico de relíquias de "
+                        + target.getName().getString() + "?\n").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)
+                .append(confirm).append(Component.literal("  ")).append(cancel), false);
+        return 1;
+    }
+
+    private int clearHistory(CommandContext<CommandSourceStack> ctx)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer staff = ctx.getSource().getPlayerOrException();
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        LoreStore store = service.data(ctx.getSource().getServer());
+        int removed = store.clearHistory(target.getUUID());
+        store.history(staff.getUUID(), staff.getName().getString(), "HISTORICO_APAGADO",
+                target.getName().getString() + " | " + removed + " registro(s)");
+        store.save();
+        ctx.getSource().sendSuccess(() -> Component.literal("Histórico de relíquias apagado: "
+                + removed + " registro(s).").withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD), true);
+        return 1;
     }
 
     private int vault(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
