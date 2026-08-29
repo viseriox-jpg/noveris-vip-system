@@ -18,10 +18,13 @@ final class VipConfig {
             "permission_renew = 2",
             "permission_history = 2",
             "permission_vault = 2",
-            "warning_days = \"7,3,1\""
+            "warning_days = \"7,3,1\"",
+            "history_retention_days = 180",
+            "retired_item_retention_days = 90"
     );
     final int kitManage, grant, renew, history, vault;
     final int[] warningDays;
+    final int historyRetentionDays, retiredItemRetentionDays;
 
     private VipConfig(Map<String, String> values) {
         kitManage = number(values, "permission_kit_manage", 2, 0, 4);
@@ -34,6 +37,8 @@ final class VipConfig {
                     try { return Math.max(1, Integer.parseInt(value)); }
                     catch (NumberFormatException ignored) { return 1; }
                 }).distinct().sorted().toArray();
+        historyRetentionDays = number(values, "history_retention_days", 180, 7, 3650);
+        retiredItemRetentionDays = number(values, "retired_item_retention_days", 90, 7, 3650);
     }
 
     static VipConfig load(MinecraftServer server) {

@@ -126,11 +126,20 @@ final class VipEvents {
                         .then(Commands.argument("nick", StringArgumentType.word())
                                 .then(Commands.argument("dias", IntegerArgumentType.integer(1, 3650))
                                         .executes(this::renewOffline))))
+                .then(Commands.literal("testar")
+                        .requires(source -> source.hasPermission(4))
+                        .then(Commands.argument("kit", StringArgumentType.word()).suggests(this::suggestKits)
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(ctx -> testVip(ctx, 1))
+                                        .then(Commands.argument("minutos", IntegerArgumentType.integer(1, 60))
+                                                .executes(ctx -> testVip(ctx,
+                                                        IntegerArgumentType.getInteger(ctx, "minutos")))))))
                 .then(Commands.literal("consultar")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).history))
                         .then(Commands.argument("player", EntityArgument.player()).executes(this::inspect)))
                 .then(Commands.literal("diagnostico")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).history))
+                        .then(Commands.literal("todos").executes(this::diagnoseAll))
                         .then(Commands.argument("player", EntityArgument.player()).executes(this::diagnose)))
                 .then(Commands.literal("reparar")
                         .requires(source -> source.hasPermission(4))
@@ -197,7 +206,9 @@ final class VipEvents {
         if (source.hasPermission(config.vault))
             helpLine(source, "/vip cofre <player>", "Abrir o cofre", "/vip cofre ");
         if (source.hasPermission(4)) {
+            helpLine(source, "/vip testar <kit> <player> [minutos]", "Criar VIP curto de teste", "/vip testar ");
             helpLine(source, "/vip reparar <player>", "Corrigir inconsistências", "/vip reparar ");
+            helpLine(source, "/vip diagnostico todos", "Diagnóstico global", "/vip diagnostico todos");
             helpLine(source, "/vip apagarhistorico <player>", "Apagar histórico", "/vip apagarhistorico ");
         }
         source.sendSuccess(() -> Component.literal("Clique em um comando para colocá-lo no chat.")
@@ -436,6 +447,22 @@ final class VipEvents {
         return 1;
     }
 
+    private int testVip(CommandContext<CommandSourceStack> ctx, int minutes) throws CommandSyntaxException {
+        ServerPlayer staff = ctx.getSource().getPlayerOrException();
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        String kit = StringArgumentType.getString(ctx, "kit");
+        if (!service.grantTest(staff, target, kit, minutes)) {
+            ctx.getSource().sendFailure(Component.literal("Kit inexistente."));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.literal("✔ TESTE INICIADO — ")
+                .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD)
+                .append(target.getDisplayName().copy().withStyle(ChatFormatting.AQUA))
+                .append(Component.literal(" | " + minutes + " minuto(s) | somente itens temporários")
+                        .withStyle(ChatFormatting.YELLOW)), true);
+        return 1;
+    }
+
     private OfflinePlayer resolveOffline(CommandSourceStack source, String nick) {
         var cache = source.getServer().getProfileCache();
         if (cache == null) {
@@ -504,6 +531,29 @@ final class VipEvents {
                         diagnosis.issues() == 0 ? ChatFormatting.GREEN : ChatFormatting.RED, ChatFormatting.BOLD));
         ctx.getSource().sendSuccess(() -> report, false);
         return 1;
+    }
+
+    private int diagnoseAll(CommandContext<CommandSourceStack> ctx) {
+        VipService.GlobalDiagnosis result = service.diagnoseAll(ctx.getSource().getServer());
+        int problems = result.expiredProfiles() + result.missingKitProfiles()
+                + result.invalidPendingDeliveries() + result.onlineItemIssues();
+        ctx.getSource().sendSuccess(() -> Component.literal("✦ DIAGNÓSTICO GLOBAL VIP ✦")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
+                .append(Component.literal("\nPerfis: " + result.profiles()
+                        + " | vencidos ainda registrados: " + result.expiredProfiles())
+                        .withStyle(ChatFormatting.GRAY))
+                .append(Component.literal("\nPerfis com kit ausente: " + result.missingKitProfiles()
+                        + " | entregas pendentes: " + result.pendingDeliveries()
+                        + " | pendências inválidas: " + result.invalidPendingDeliveries())
+                        .withStyle(ChatFormatting.GRAY))
+                .append(Component.literal("\nCofres registrados: " + result.vaultOwners()
+                        + " | problemas em itens de jogadores online: " + result.onlineItemIssues())
+                        .withStyle(ChatFormatting.GRAY))
+                .append(Component.literal("\nResultado: " + (problems == 0
+                        ? "nenhuma inconsistência encontrada" : problems + " possível(is) problema(s)"))
+                        .withStyle(problems == 0 ? ChatFormatting.GREEN : ChatFormatting.RED,
+                                ChatFormatting.BOLD)), false);
+        return problems == 0 ? 1 : problems;
     }
 
     private String formatDuration(long millis) {
@@ -595,6 +645,17 @@ final class VipEvents {
                 .append(target.getDisplayName().copy().withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
                 .append(Component.literal("  |  " + filter + "  |  " + page + "/" + pageCount)
                         .withStyle(ChatFormatting.GRAY)), false);
+        String playerName = target.getName().getString();
+        ctx.getSource().sendSuccess(() -> Component.literal("Filtros: ").withStyle(ChatFormatting.GRAY)
+                .append(historyButton("TODOS", playerName, "todos", 1, filter.equalsIgnoreCase("todos")))
+                .append(Component.literal(" "))
+                .append(historyButton("VIP", playerName, "vip", 1, filter.equalsIgnoreCase("vip")))
+                .append(Component.literal(" "))
+                .append(historyButton("ITENS", playerName, "item", 1, filter.equalsIgnoreCase("item")))
+                .append(Component.literal(" "))
+                .append(historyButton("KITS", playerName, "kit", 1, filter.equalsIgnoreCase("kit")))
+                .append(Component.literal(" "))
+                .append(historyButton("COFRE", playerName, "cofre", 1, filter.equalsIgnoreCase("cofre"))), false);
         int from = Math.max(0, filtered.size() - page * pageSize);
         int to = filtered.size() - (page - 1) * pageSize;
         filtered.subList(from, to).forEach(entry ->
@@ -603,7 +664,23 @@ final class VipEvents {
                         .append(Component.literal(actionLabel(entry.action()))
                                 .withStyle(actionColor(entry.action()), ChatFormatting.BOLD))
                         .append(Component.literal("\n  " + entry.detail()).withStyle(ChatFormatting.GRAY)), false));
+        MutableComponent navigation = Component.empty();
+        if (page > 1) navigation.append(historyButton("← ANTERIOR", playerName, filter, page - 1, false));
+        if (page > 1 && page < pageCount) navigation.append(Component.literal("   "));
+        if (page < pageCount) navigation.append(historyButton("PRÓXIMA →", playerName, filter, page + 1, false));
+        if (pageCount > 1) ctx.getSource().sendSuccess(() -> navigation, false);
         return filtered.size();
+    }
+
+    private MutableComponent historyButton(String label, String player, String filter, int page, boolean selected) {
+        return Component.literal("[" + label + "]").withStyle(style -> style
+                .withColor(selected ? ChatFormatting.GOLD : ChatFormatting.AQUA)
+                .withBold(selected)
+                .withUnderlined(!selected)
+                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
+                        "/vip historico " + player + " " + filter + " " + page))
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                        Component.literal(selected ? "Filtro atual" : "Clique para abrir"))));
     }
 
     private boolean matchesFilter(String action, String filter) {

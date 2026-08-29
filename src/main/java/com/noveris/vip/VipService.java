@@ -113,6 +113,32 @@ final class VipService {
         return true;
     }
 
+    boolean grantTest(ServerPlayer staff, ServerPlayer target, String kitName, int minutes) {
+        VipStore current = store(staff.getServer());
+        VipStore.Kit kit = current.data.kits.get(kitName.toLowerCase());
+        if (kit == null) return false;
+        long now = System.currentTimeMillis();
+        long expiresAt = now + minutes * 60_000L;
+        current.data.profiles.put(target.getUUID().toString(), new VipStore.Profile(
+                target.getName().getString(), kit.plan, kit.name, now, expiresAt));
+        int delivered = 0;
+        for (VipStore.KitItem template : kit.items) {
+            if (!template.temporary()) continue;
+            ItemStack stack = VipStore.decode(template.encodedStack(), target.registryAccess()).copy();
+            VipItemData.attach(stack, target.getUUID(), target.getName().getString(), kit.name, expiresAt);
+            if (!target.getInventory().add(stack)) target.drop(stack, false);
+            delivered++;
+        }
+        current.data.sentWarnings.remove(target.getUUID().toString());
+        current.addHistory(target.getUUID(), target.getName().getString(), "VIP_TESTE_INICIADO",
+                kit.name + " | " + minutes + " minuto(s) | itens temporários: " + delivered
+                        + " | staff: " + staff.getName().getString());
+        current.save();
+        target.sendSystemMessage(Component.literal("⚠ VIP DE TESTE ATIVADO POR " + minutes + " MINUTO(S)")
+                .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD));
+        return true;
+    }
+
     boolean renew(ServerPlayer staff, ServerPlayer target, int days) {
         VipStore current = store(staff.getServer());
         VipStore.Profile old = current.data.profiles.get(target.getUUID().toString());
@@ -255,7 +281,11 @@ final class VipService {
             sendExpiryWarnings(current, player, now);
         }
         if (ticks % 1200 == 0) scanDroppedItems(currentServer, current, now);
-        if (ticks % 1200 == 0) { current.purgeVault(); current.save(); }
+        if (ticks % 1200 == 0) {
+            current.purgeVault();
+            current.cleanup(VipConfig.load(currentServer));
+            current.save();
+        }
     }
 
     void queueContainer(Container container) {
@@ -297,7 +327,7 @@ final class VipService {
                 continue;
             }
             temporary++;
-            if (!seen.add(info.itemId()) || current.data.retiredItemIds.contains(info.itemId().toString())) issues++;
+            if (!seen.add(info.itemId()) || isRetired(current, info.itemId())) issues++;
             VipStore.Profile ownerProfile = current.data.profiles.get(info.originalOwner().toString());
             if (ownerProfile == null || ownerProfile.expiresAt() != info.expiresAt()) issues++;
         }
@@ -308,6 +338,24 @@ final class VipService {
         return new Diagnosis(profile, temporary,
                 current.data.vault.getOrDefault(key, List.of()).size(),
                 current.data.pendingDeliveries.containsKey(key), grants, issues);
+    }
+
+    GlobalDiagnosis diagnoseAll(MinecraftServer server) {
+        VipStore current = store(server);
+        long now = System.currentTimeMillis();
+        int missingKitProfiles = 0;
+        int expiredProfiles = 0;
+        for (VipStore.Profile profile : current.data.profiles.values()) {
+            if (!current.data.kits.containsKey(profile.kit().toLowerCase())) missingKitProfiles++;
+            if (profile.expiresAt() <= now) expiredProfiles++;
+        }
+        int invalidPending = 0;
+        for (VipStore.PendingDelivery pending : current.data.pendingDeliveries.values())
+            if (!current.data.kits.containsKey(pending.kit().toLowerCase())) invalidPending++;
+        int onlineIssues = 0;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) onlineIssues += diagnose(player).issues();
+        return new GlobalDiagnosis(current.data.profiles.size(), expiredProfiles, missingKitProfiles,
+                current.data.pendingDeliveries.size(), invalidPending, current.data.vault.size(), onlineIssues);
     }
 
     RepairResult repair(ServerPlayer staff, ServerPlayer target) {
@@ -323,7 +371,7 @@ final class VipService {
                 }
                 continue;
             }
-            if (current.data.retiredItemIds.contains(info.itemId().toString())) {
+            if (isRetired(current, info.itemId())) {
                 stack.setCount(0);
                 removed++;
                 continue;
@@ -355,6 +403,35 @@ final class VipService {
     record Diagnosis(VipStore.Profile profile, int temporaryItems, int vaultItems,
                      boolean pendingDelivery, long deliveredKits, int issues) {}
     record RepairResult(int reidentified, int removed, int synchronizedItems, int invalidMetadata) {}
+    record GlobalDiagnosis(int profiles, int expiredProfiles, int missingKitProfiles,
+                           int pendingDeliveries, int invalidPendingDeliveries,
+                           int vaultOwners, int onlineItemIssues) {}
+
+    private boolean isRetired(VipStore current, UUID itemId) {
+        return current.data.retiredItemIds.contains(itemId.toString());
+    }
+
+    private void alertRollback(MinecraftServer server, VipStore current, VipItemData.Info info,
+                               ItemStack stack, String playerName, String location) {
+        VipStore.RetiredItem retired = current.data.retiredItems.get(info.itemId().toString());
+        long archivedAt = retired == null ? 0 : retired.retiredAt();
+        String archivedTime = archivedAt == 0 ? "desconhecido" : java.time.format.DateTimeFormatter
+                .ofPattern("dd/MM/yyyy HH:mm").withZone(java.time.ZoneId.of("America/Sao_Paulo"))
+                .format(java.time.Instant.ofEpochMilli(archivedAt));
+        String detail = "jogador: " + playerName + " | item: " + stack.getHoverName().getString()
+                + " | kit: " + info.kit() + " | id: " + info.itemId() + " | local: " + location
+                + " | original arquivado: " + archivedTime;
+        current.addHistory(info.originalOwner(), info.originalOwnerName(), "ITEM_ROLLBACK_BLOQUEADO", detail);
+        for (ServerPlayer staff : server.getPlayerList().getPlayers()) {
+            if (!staff.hasPermissions(VipConfig.load(server).history)) continue;
+            staff.sendSystemMessage(Component.literal("⚠ CÓPIA VIP DE ROLLBACK BLOQUEADA\n")
+                    .withStyle(ChatFormatting.RED, ChatFormatting.BOLD)
+                    .append(Component.literal("Jogador: " + playerName + " | Item: " + stack.getHoverName().getString()
+                            + "\nKit: " + info.kit() + " | ID: " + info.itemId()
+                            + "\nLocal: " + location + " | Arquivado em: " + archivedTime)
+                            .withStyle(ChatFormatting.GRAY)));
+        }
+    }
 
     private void sendExpiryWarnings(VipStore current, ServerPlayer player, long now) {
         VipStore.Profile profile = current.data.profiles.get(player.getUUID().toString());
@@ -380,10 +457,11 @@ final class VipService {
                 if (!(entity instanceof ItemEntity itemEntity)) continue;
                 ItemStack stack = itemEntity.getItem();
                 VipItemData.read(stack).ifPresent(info -> {
-                    if (current.data.retiredItemIds.contains(info.itemId().toString())) {
+                    if (isRetired(current, info.itemId())) {
+                        alertRollback(server, current, info, stack, info.originalOwnerName(),
+                                "item no chão em " + level.dimension().location() + " "
+                                        + itemEntity.blockPosition().toShortString());
                         itemEntity.discard();
-                        current.addHistory(info.originalOwner(), info.originalOwnerName(), "ITEM_ROLLBACK_BLOQUEADO",
-                                stack.getHoverName().getString() + " | item dropado restaurado");
                         current.save();
                         return;
                     }
@@ -404,7 +482,10 @@ final class VipService {
             ItemStack stack = container.getItem(slot);
             VipItemData.Info info = VipItemData.read(stack).orElse(null);
             if (info == null) continue;
-            if (current.data.retiredItemIds.contains(info.itemId().toString())) {
+            if (isRetired(current, info.itemId())) {
+                String location = container instanceof net.minecraft.world.level.block.entity.BlockEntity blockEntity
+                        ? "recipiente em " + blockEntity.getBlockPos().toShortString() : "recipiente carregado";
+                alertRollback(server, current, info, stack, info.originalOwnerName(), location);
                 stack.setCount(0);
                 changed = true;
                 continue;
@@ -423,9 +504,9 @@ final class VipService {
     private void scanPlayer(VipStore current, ServerPlayer player, long now) {
         for (ItemStack stack : allPlayerStacks(player)) {
             VipItemData.read(stack).ifPresent(info -> {
-                if (current.data.retiredItemIds.contains(info.itemId().toString())) {
-                    current.addHistory(info.originalOwner(), info.originalOwnerName(), "ITEM_ROLLBACK_BLOQUEADO",
-                            stack.getHoverName().getString() + " | portador: " + player.getName().getString());
+                if (isRetired(current, info.itemId())) {
+                    alertRollback(player.getServer(), current, info, stack, player.getName().getString(),
+                            "inventário/ender chest do jogador");
                     stack.setCount(0);
                     current.save();
                     return;

@@ -61,6 +61,8 @@ final class VipStore {
     void archive(UUID holder, String holderName, ItemStack stack, HolderLookup.Provider registries) {
         VipItemData.Info info = VipItemData.read(stack).orElseThrow();
         data.retiredItemIds.add(info.itemId().toString());
+        data.retiredItems.put(info.itemId().toString(), new RetiredItem(
+                System.currentTimeMillis(), stack.getHoverName().getString(), info.kit(), info.originalOwnerName()));
         data.vault.computeIfAbsent(holder.toString(), ignored -> new ArrayList<>()).add(
                 new VaultEntry(encode(stack, registries), System.currentTimeMillis(),
                         System.currentTimeMillis() + VAULT_RETENTION_MS, info.originalOwnerName(), info.kit()));
@@ -78,6 +80,21 @@ final class VipStore {
         long now = System.currentTimeMillis();
         data.vault.values().forEach(entries -> entries.removeIf(entry -> entry.deleteAt <= now));
         data.vault.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+    }
+
+    void cleanup(VipConfig config) {
+        long now = System.currentTimeMillis();
+        long historyCutoff = now - config.historyRetentionDays * 86_400_000L;
+        data.history.values().forEach(entries -> entries.removeIf(entry -> entry.timestamp() < historyCutoff));
+        data.history.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+
+        long retiredCutoff = now - config.retiredItemRetentionDays * 86_400_000L;
+        data.retiredItems.entrySet().removeIf(entry -> entry.getValue().retiredAt() < retiredCutoff);
+        data.retiredItemIds.retainAll(data.retiredItems.keySet());
+        data.sentWarnings.entrySet().removeIf(entry -> {
+            Profile profile = data.profiles.get(entry.getKey());
+            return profile == null || profile.expiresAt() <= now;
+        });
     }
 
     static String encode(ItemStack stack, HolderLookup.Provider registries) {
@@ -106,6 +123,7 @@ final class VipStore {
         Map<String, PendingDelivery> pendingDeliveries;
         Map<String, List<Integer>> sentWarnings;
         Set<String> retiredItemIds;
+        Map<String, RetiredItem> retiredItems;
         Data normalize() {
             if (kits == null) kits = new HashMap<>();
             if (profiles == null) profiles = new HashMap<>();
@@ -121,6 +139,10 @@ final class VipStore {
             if (pendingDeliveries == null) pendingDeliveries = new HashMap<>();
             if (sentWarnings == null) sentWarnings = new HashMap<>();
             if (retiredItemIds == null) retiredItemIds = new HashSet<>();
+            if (retiredItems == null) retiredItems = new HashMap<>();
+            long migratedAt = System.currentTimeMillis();
+            retiredItemIds.forEach(id -> retiredItems.putIfAbsent(id,
+                    new RetiredItem(migratedAt, "Item legado", "desconhecido", "desconhecido")));
             return this;
         }
     }
@@ -138,4 +160,5 @@ final class VipStore {
     record HistoryEntry(long timestamp, String playerName, String action, String detail) {}
     record PlanDefinition(String id, String displayName, boolean enabled, int order) {}
     record PendingDelivery(String playerName, String kit, int days, String staffName, long queuedAt) {}
+    record RetiredItem(long retiredAt, String itemName, String kit, String originalOwner) {}
 }

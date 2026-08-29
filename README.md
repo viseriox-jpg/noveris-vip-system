@@ -42,7 +42,9 @@ Os itens usados como modelo voltam para o inventário da staff depois de salvar.
 - `/vip renovaroffline <nick> <dias>`
 - `/vip consultar <player>`
 - `/vip diagnostico <player>` — resume plano, prazo, itens, cofre, entregas e inconsistências.
+- `/vip diagnostico todos` — OP; verifica perfis, kits ausentes, entregas e itens online.
 - `/vip reparar <player>` — OP 4; corrige IDs, datas e registros órfãos.
+- `/vip testar <kit> <player> [minutos]` — OP 4; teste curto, padrão de um minuto.
 - `/vip historico <player> [todos|vip|item|cofre|kit] [pagina]`
 - `/vip apagarhistorico <player>` — OP 4; exige confirmação clicável.
 - `/vip cofre <player>` — visualização administrativa dos itens expirados.
@@ -63,6 +65,8 @@ O inventário, armadura, mão secundária e Ender Chest dos jogadores conectados
 Itens dropados passam por verificação periódica. Recipientes vanilla encontrados durante o carregamento de chunks entram em uma fila e são verificados gradualmente, com limite de oito recipientes por tick, evitando atrasar a abertura do mundo. Pilhas divididas recebem novas identificações de rastreamento, mantendo proprietário, kit e vencimento. Integrações com inventários internos de mods dependem de esses inventários exporem seus itens ao Minecraft/NeoForge.
 
 O jogador recebe avisos configuráveis antes do vencimento. Os padrões são 7, 3 e 1 dia. Níveis de permissão e dias de aviso ficam em `serverconfig/noveris_vip_system-server.toml`.
+O mesmo arquivo configura `history_retention_days` e `retired_item_retention_days`. A limpeza automática
+remove históricos antigos, avisos obsoletos e identificadores aposentados após os prazos definidos.
 
 Os dados ficam em `noveris_vip_system.json`, dentro da pasta do mundo, e sobrevivem a reinicializações.
 Identificadores de itens já arquivados também são preservados. Se uma restauração de backup fizer uma cópia
