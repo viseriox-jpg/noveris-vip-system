@@ -174,7 +174,7 @@ final class KitPreviewMenu extends ChestMenu {
         if (slotId >= TEMPORARY_SLOT && slotId <= INFORMATION_SLOT) {
             mode = slotId - TEMPORARY_SLOT;
             page = 0;
-            openCategory = null;
+            openCategory = mode == 2 && categories.size() == 1 ? categories.getFirst() : null;
             rebuild();
             return;
         }

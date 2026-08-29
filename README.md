@@ -30,7 +30,7 @@ O kit funciona como pacote-base. Benefícios variáveis são cadastrados uma ún
 
 Cada categoria abre separadamente, possui páginas de 45 opções e exige exatamente a quantidade configurada. A entrega só acontece ao confirmar.
 Fechar a tela preserva a pendência. Ter um perfil VIP ativo sem uma concessão administrativa não libera escolhas.
-Em `/vip kit ver <nome>`, quatro botões fixos abrem temporários, permanentes, escolhas e informações do plano. A seção atual fica destacada, e cada categoria de escolha abre suas próprias páginas somente para visualização.
+Em `/vip kit ver <nome>`, quatro botões fixos abrem temporários, permanentes, escolhas e informações do plano. A seção atual fica destacada. Quando há uma única categoria, **ESCOLHAS** abre diretamente seus itens; com várias categorias, mostra primeiro a lista de catálogos.
 
 ## Comandos
 
