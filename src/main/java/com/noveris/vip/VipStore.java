@@ -178,7 +178,8 @@ final class VipStore {
                       String originalOwner, String kit) {}
     record HistoryEntry(long timestamp, String playerName, String action, String detail) {}
     record PlanDefinition(String id, String displayName, boolean enabled, int order) {}
-    record PendingDelivery(String playerName, String kit, int days, String staffName, long queuedAt) {}
+    record PendingDelivery(String playerName, String kit, int days, String staffName, long queuedAt,
+                           boolean renewalKit) {}
     record RetiredItem(long retiredAt, String itemName, String kit, String originalOwner) {}
     static final class ChoiceCategory {
         String name;

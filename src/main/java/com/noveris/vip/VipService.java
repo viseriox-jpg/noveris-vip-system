@@ -152,7 +152,7 @@ final class VipService {
             if (pending == null) {
                 player.sendSystemMessage(Component.literal("O plano " + profile.plan()
                         + " ainda não possui categorias vinculadas. A staff deve usar "
-                        + "/vip plano catalogo adicionar <plano> <categoria>.")
+                        + "/vip catalogo vincular <categoria> <plano>.")
                         .withStyle(ChatFormatting.YELLOW));
                 return false;
             }
@@ -377,9 +377,21 @@ final class VipService {
         VipStore current = store(server);
         if (!current.data.kits.containsKey(kitName.toLowerCase())) return false;
         current.data.pendingDeliveries.put(playerId.toString(), new VipStore.PendingDelivery(
-                playerName, kitName.toLowerCase(), days, staffName, System.currentTimeMillis()));
+                playerName, kitName.toLowerCase(), days, staffName, System.currentTimeMillis(), false));
         current.addHistory(playerId, playerName, "ENTREGA_PENDENTE",
                 "kit: " + kitName + " | " + days + " dias | staff: " + staffName);
+        current.save();
+        return true;
+    }
+
+    boolean queueRenewalKit(MinecraftServer server, UUID playerId, String playerName, String staffName) {
+        VipStore current = store(server);
+        VipStore.Profile profile = current.data.profiles.get(playerId.toString());
+        if (profile == null || !current.data.kits.containsKey(profile.kit().toLowerCase())) return false;
+        current.data.pendingDeliveries.put(playerId.toString(), new VipStore.PendingDelivery(
+                playerName, profile.kit().toLowerCase(), 0, staffName, System.currentTimeMillis(), true));
+        current.addHistory(playerId, playerName, "KIT_REENTREGA_PENDENTE",
+                "kit: " + profile.kit() + " | staff: " + staffName);
         current.save();
         return true;
     }
@@ -413,8 +425,10 @@ final class VipService {
         VipStore.Kit kit = current.data.kits.get(pending.kit());
         if (kit == null) return;
         long now = System.currentTimeMillis();
-        long expiresAt = now + pending.days() * 24L * 60 * 60 * 1000;
-        current.data.profiles.put(target.getUUID().toString(), new VipStore.Profile(
+        VipStore.Profile existing = current.data.profiles.get(target.getUUID().toString());
+        long expiresAt = pending.renewalKit() && existing != null ? existing.expiresAt()
+                : now + pending.days() * 24L * 60 * 60 * 1000;
+        if (!pending.renewalKit()) current.data.profiles.put(target.getUUID().toString(), new VipStore.Profile(
                 target.getName().getString(), kit.plan, kit.name, now, expiresAt));
         for (VipStore.KitItem template : kit.items) {
             ItemStack stack = VipStore.decode(template.encodedStack(), target.registryAccess()).copy();
@@ -422,14 +436,18 @@ final class VipService {
                     target.getName().getString(), kit.name, expiresAt);
             if (!target.getInventory().add(stack)) target.drop(stack, false);
         }
-        current.addHistory(target.getUUID(), target.getName().getString(), "VIP_ENTREGUE_AO_ENTRAR",
+        current.addHistory(target.getUUID(), target.getName().getString(),
+                pending.renewalKit() ? "KIT_REENTREGUE" : "VIP_ENTREGUE_AO_ENTRAR",
                 "kit: " + kit.name + " | staff: " + pending.staffName());
-        current.data.choiceEligiblePlayers.add(target.getUUID().toString());
-        current.data.completedChoiceGrants.remove(target.getUUID().toString());
-        createPendingChoices(current, target.getUUID(), target.getName().getString(), kit.plan, kit.name);
-        target.sendSystemMessage(Component.literal("✦ SEU VIP PENDENTE FOI ENTREGUE ✦")
+        if (!pending.renewalKit()) {
+            current.data.choiceEligiblePlayers.add(target.getUUID().toString());
+            current.data.completedChoiceGrants.remove(target.getUUID().toString());
+            createPendingChoices(current, target.getUUID(), target.getName().getString(), kit.plan, kit.name);
+        }
+        target.sendSystemMessage(Component.literal(pending.renewalKit()
+                        ? "✦ SEU KIT RENOVADO FOI ENTREGUE ✦" : "✦ SEU VIP PENDENTE FOI ENTREGUE ✦")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
-        if (current.data.pendingChoices.containsKey(target.getUUID().toString()))
+        if (!pending.renewalKit() && current.data.pendingChoices.containsKey(target.getUUID().toString()))
             target.sendSystemMessage(Component.literal("Use /vip escolher para selecionar seus benefícios.")
                     .withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD));
     }
@@ -761,10 +779,11 @@ final class VipService {
     enum VaultResult { SUCCESS, INVALID_SLOT, EXPIRED_ARCHIVE, INVALID_ITEM }
 
     boolean openKitPreview(ServerPlayer player, String kitName) {
-        VipStore.Kit kit = store(player.getServer()).data.kits.get(kitName.toLowerCase());
+        VipStore current = store(player.getServer());
+        VipStore.Kit kit = current.data.kits.get(kitName.toLowerCase());
         if (kit == null) return false;
         SimpleContainer preview = new SimpleContainer(54);
-        player.openMenu(new SimpleMenuProvider((id, inv, ignored) -> new KitPreviewMenu(id, inv, preview, kit),
+        player.openMenu(new SimpleMenuProvider((id, inv, ignored) -> new KitPreviewMenu(id, inv, preview, current, kit),
                 Component.literal("Kit " + kit.name + " — " + kit.plan)));
         return true;
     }

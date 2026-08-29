@@ -25,11 +25,12 @@ O kit funciona como pacote-base. Benefícios variáveis são cadastrados uma ún
 
 1. `/vip catalogo criar arma 1` abre o editor e define que o jogador escolhe uma opção.
 2. O editor mostra 45 opções por página. O botão de modo alterna entre temporários e permanentes, ambos sem limite de páginas.
-3. `/vip plano catalogo adicionar soberano arma` vincula a categoria ao plano.
+3. `/vip catalogo vincular arma soberano` vincula a categoria ao plano.
 4. Ao usar `/vip dar <kit> <player>`, o jogador recebe o kit-base e ganha acesso a `/vip escolher`.
 
 Cada categoria abre separadamente, possui páginas de 45 opções e exige exatamente a quantidade configurada. A entrega só acontece ao confirmar.
 Fechar a tela preserva a pendência. Ter um perfil VIP ativo sem uma concessão administrativa não libera escolhas.
+Em `/vip kit ver <nome>`, o jogador pode alternar entre temporários, permanentes, escolhas e informações do plano. Cada categoria de escolha abre suas próprias páginas somente para visualização.
 
 ## Comandos
 
@@ -38,13 +39,12 @@ Fechar a tela preserva a pendência. Ter um perfil VIP ativo sem uma concessão 
 - `/vip kit ver <nome>` — público; abre uma visualização do kit.
 - `/vip kit criar <nome> <plano>`
 - `/vip kit editar <nome>`
-- `/vip kit listar`
 - `/vip kit excluir <nome>`
 - `/vip catalogo criar <categoria> <limite>`
 - `/vip catalogo editar <categoria> [novo limite]`
 - `/vip catalogo listar`
 - `/vip catalogo excluir <categoria>`
-- `/vip plano catalogo adicionar|remover <plano> <categoria>`
+- `/vip catalogo vincular|desvincular <categoria> <plano>`
 - `/vip escolher` — disponível somente com escolhas liberadas por uma entrega administrativa.
 - `/vip escolhas <player> [resetar]`
 - `/vip plano listar`
@@ -54,24 +54,21 @@ Fechar a tela preserva a pendência. Ter um perfil VIP ativo sem uma concessão 
 - `/vip dar <kit> <player> [dias]` — padrão de 30 dias.
 - `/vip dar <kit> <player> [dias] confirmar` — substitui um VIP existente conscientemente.
 - `/vip renovar <player> <dias>`
-- `/vip renovarcomkit <player> <dias>` — renova e entrega o kit novamente.
-- `/vip entregarpermanentes <kit> <player>`
+- `/vip renovar <player> <dias> kit` — renova e entrega o kit novamente.
 - `/vip remover <player> confirmar`
-- `/vip daroffline <kit> <nick> [dias]` — entrega quando o jogador entrar.
-- `/vip renovaroffline <nick> <dias>`
-- `/vip consultar <player>`
+- `/vip dar` e `/vip renovar` aceitam jogadores offline conhecidos pelo servidor.
 - `/vip diagnostico <player>` — resume plano, prazo, itens, cofre, entregas e inconsistências.
 - `/vip diagnostico todos` — OP; verifica perfis, kits ausentes, entregas e itens online.
 - `/vip reparar <player>` — OP 4; corrige IDs, datas e registros órfãos.
 - `/vip testar <kit> <player> [minutos]` — OP 4; teste curto, padrão de um minuto.
 - `/vip historico <player> [todos|vip|item|cofre|kit] [pagina]`
-- `/vip apagarhistorico <player>` — OP 4; exige confirmação clicável.
+- `/vip historico apagar <player>` — OP 4; exige confirmação clicável.
 - `/vip cofre <player>` — visualização administrativa dos itens expirados.
 - `/vip cofre <player> restaurar <slot> <dias>`
-- `/vip cofre <player> permanente <slot>`
+- `/vip cofre <player> manter <slot>`
 - `/vip cofre <player> excluir <slot>`
 
-Os comandos administrativos exigem permission level 2. `/vip kits` e `/vip kit ver` ficam disponíveis para todos. O prefixo antigo `/noverisvip` continua funcionando.
+Os comandos administrativos exigem permission level 2. `/vip kits` e `/vip kit ver` ficam disponíveis para todos.
 
 ## Itens temporários
 

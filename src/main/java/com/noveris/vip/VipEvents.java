@@ -38,7 +38,6 @@ final class VipEvents {
     @SubscribeEvent
     public void registerCommands(RegisterCommandsEvent event) {
         event.getDispatcher().register(commandRoot("vip"));
-        event.getDispatcher().register(commandRoot("noverisvip"));
     }
 
     private LiteralArgumentBuilder<CommandSourceStack> commandRoot(String root) {
@@ -68,15 +67,7 @@ final class VipEvents {
                                 .then(Commands.argument("id", StringArgumentType.word()).suggests(this::suggestAllPlans)
                                         .then(Commands.argument("nome", StringArgumentType.string())
                                                 .executes(this::renamePlan))))
-                        .then(Commands.literal("catalogo")
-                                .then(Commands.literal("adicionar")
-                                        .then(Commands.argument("plano", StringArgumentType.word()).suggests(this::suggestAllPlans)
-                                                .then(Commands.argument("categoria", StringArgumentType.word())
-                                                        .suggests(this::suggestChoiceCategories).executes(this::linkCategory))))
-                                .then(Commands.literal("remover")
-                                        .then(Commands.argument("plano", StringArgumentType.word()).suggests(this::suggestAllPlans)
-                                                .then(Commands.argument("categoria", StringArgumentType.word())
-                                                        .suggests(this::suggestChoiceCategories).executes(this::unlinkCategory))))))
+                        )
                 .then(Commands.literal("catalogo")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).kitManage))
                         .then(Commands.literal("criar")
@@ -91,6 +82,14 @@ final class VipEvents {
                                                 .executes(ctx -> editChoiceCategory(ctx,
                                                         IntegerArgumentType.getInteger(ctx, "limite"))))))
                         .then(Commands.literal("listar").executes(this::listChoiceCategories))
+                        .then(Commands.literal("vincular")
+                                .then(Commands.argument("categoria", StringArgumentType.word()).suggests(this::suggestChoiceCategories)
+                                        .then(Commands.argument("plano", StringArgumentType.word()).suggests(this::suggestAllPlans)
+                                                .executes(this::linkCategory))))
+                        .then(Commands.literal("desvincular")
+                                .then(Commands.argument("categoria", StringArgumentType.word()).suggests(this::suggestChoiceCategories)
+                                        .then(Commands.argument("plano", StringArgumentType.word()).suggests(this::suggestAllPlans)
+                                                .executes(this::unlinkCategory))))
                         .then(Commands.literal("excluir")
                                 .then(Commands.argument("categoria", StringArgumentType.word())
                                         .suggests(this::suggestChoiceCategories).executes(this::deleteChoiceCategory))))
@@ -108,8 +107,6 @@ final class VipEvents {
                                 .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).kitManage))
                                 .then(Commands.argument("nome", StringArgumentType.word())
                                         .suggests(this::suggestKits).executes(this::editKit)))
-                        .then(Commands.literal("listar").requires(source -> source.hasPermission(VipConfig.load(source.getServer()).kitManage))
-                                .executes(this::listKits))
                         .then(Commands.literal("excluir")
                                 .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).kitManage))
                                 .then(Commands.argument("nome", StringArgumentType.word())
@@ -118,7 +115,7 @@ final class VipEvents {
                 .then(Commands.literal("dar")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).grant))
                         .then(Commands.argument("kit", StringArgumentType.word()).suggests(this::suggestKits)
-                                .then(Commands.argument("player", EntityArgument.player())
+                                .then(Commands.argument("player", StringArgumentType.word()).suggests(this::suggestPlayers)
                                         .executes(ctx -> grant(ctx, 30, false))
                                         .then(Commands.literal("confirmar").executes(ctx -> grant(ctx, 30, true)))
                                         .then(Commands.argument("dias", IntegerArgumentType.integer(1, 3650))
@@ -133,32 +130,10 @@ final class VipEvents {
                                         .requires(source -> source.hasPermission(4)).executes(this::resetChoices))))
                 .then(Commands.literal("renovar")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).renew))
-                        .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("player", StringArgumentType.word()).suggests(this::suggestPlayers)
                                 .then(Commands.argument("dias", IntegerArgumentType.integer(1, 3650))
-                                        .executes(this::renew))))
-                .then(Commands.literal("renovarcomkit")
-                        .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).renew))
-                        .then(Commands.argument("player", EntityArgument.player())
-                                .then(Commands.argument("dias", IntegerArgumentType.integer(1, 3650))
-                                        .executes(this::renewWithKit))))
-                .then(Commands.literal("entregarpermanentes")
-                        .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).grant))
-                        .then(Commands.argument("kit", StringArgumentType.word()).suggests(this::suggestKits)
-                                .then(Commands.argument("player", EntityArgument.player())
-                                        .executes(this::deliverPermanent))))
-                .then(Commands.literal("daroffline")
-                        .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).grant))
-                        .then(Commands.argument("kit", StringArgumentType.word()).suggests(this::suggestKits)
-                                .then(Commands.argument("nick", StringArgumentType.word())
-                                        .executes(ctx -> queueOffline(ctx, 30))
-                                        .then(Commands.argument("dias", IntegerArgumentType.integer(1, 3650))
-                                                .executes(ctx -> queueOffline(ctx,
-                                                        IntegerArgumentType.getInteger(ctx, "dias")))))))
-                .then(Commands.literal("renovaroffline")
-                        .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).renew))
-                        .then(Commands.argument("nick", StringArgumentType.word())
-                                .then(Commands.argument("dias", IntegerArgumentType.integer(1, 3650))
-                                        .executes(this::renewOffline))))
+                                        .executes(ctx -> renew(ctx, false))
+                                        .then(Commands.literal("kit").executes(ctx -> renew(ctx, true))))))
                 .then(Commands.literal("testar")
                         .requires(source -> source.hasPermission(4))
                         .then(Commands.argument("kit", StringArgumentType.word()).suggests(this::suggestKits)
@@ -167,9 +142,6 @@ final class VipEvents {
                                         .then(Commands.argument("minutos", IntegerArgumentType.integer(1, 60))
                                                 .executes(ctx -> testVip(ctx,
                                                         IntegerArgumentType.getInteger(ctx, "minutos")))))))
-                .then(Commands.literal("consultar")
-                        .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).history))
-                        .then(Commands.argument("player", EntityArgument.player()).executes(this::inspect)))
                 .then(Commands.literal("diagnostico")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).history))
                         .then(Commands.literal("todos").executes(this::diagnoseAll))
@@ -184,6 +156,11 @@ final class VipEvents {
                                 .then(Commands.literal("confirmar").executes(this::removeVip))))
                 .then(Commands.literal("historico")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).history))
+                        .then(Commands.literal("apagar")
+                                .requires(source -> source.hasPermission(4))
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(this::requestClearHistory)
+                                        .then(Commands.literal("confirmar").executes(this::clearHistory))))
                         .then(Commands.argument("player", EntityArgument.player())
                                 .executes(ctx -> history(ctx, "todos", 1))
                                 .then(Commands.argument("filtro", StringArgumentType.word())
@@ -195,11 +172,6 @@ final class VipEvents {
                                                 .executes(ctx -> history(ctx,
                                                         StringArgumentType.getString(ctx, "filtro"),
                                                         IntegerArgumentType.getInteger(ctx, "pagina")))))))
-                .then(Commands.literal("apagarhistorico")
-                        .requires(source -> source.hasPermission(4))
-                        .then(Commands.argument("player", EntityArgument.player())
-                                .executes(this::requestClearHistory)
-                                .then(Commands.literal("confirmar").executes(this::clearHistory))))
                 .then(Commands.literal("cofre")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).vault))
                         .then(Commands.argument("player", EntityArgument.player()).executes(this::vault)
@@ -207,7 +179,7 @@ final class VipEvents {
                                         .then(Commands.argument("slot", IntegerArgumentType.integer(1, 54))
                                                 .then(Commands.argument("dias", IntegerArgumentType.integer(1, 3650))
                                                         .executes(ctx -> restoreVault(ctx, false)))))
-                                .then(Commands.literal("permanente")
+                                .then(Commands.literal("manter")
                                         .then(Commands.argument("slot", IntegerArgumentType.integer(1, 54))
                                                 .executes(ctx -> restoreVault(ctx, true))))
                                 .then(Commands.literal("excluir")
@@ -227,8 +199,8 @@ final class VipEvents {
             helpLine(source, "/vip kit criar <nome> <plano>", "Criar um kit", "/vip kit criar ");
             helpLine(source, "/vip kit editar <nome>", "Editar um kit", "/vip kit editar ");
             helpLine(source, "/vip catalogo criar <categoria> <limite>", "Criar opções de escolha", "/vip catalogo criar ");
-            helpLine(source, "/vip plano catalogo adicionar <plano> <categoria>",
-                    "Vincular escolhas a um plano", "/vip plano catalogo adicionar ");
+            helpLine(source, "/vip catalogo vincular <categoria> <plano>",
+                    "Vincular escolhas a um plano", "/vip catalogo vincular ");
         }
         if (source.hasPermission(config.grant)) {
             helpLine(source, "/vip dar <kit> <player> [dias]", "Entregar VIP", "/vip dar ");
@@ -246,7 +218,7 @@ final class VipEvents {
             helpLine(source, "/vip testar <kit> <player> [minutos]", "Criar VIP curto de teste", "/vip testar ");
             helpLine(source, "/vip reparar <player>", "Corrigir inconsistências", "/vip reparar ");
             helpLine(source, "/vip diagnostico todos", "Diagnóstico global", "/vip diagnostico todos");
-            helpLine(source, "/vip apagarhistorico <player>", "Apagar histórico", "/vip apagarhistorico ");
+            helpLine(source, "/vip historico apagar <player>", "Apagar histórico", "/vip historico apagar ");
         }
         source.sendSuccess(() -> Component.literal("Clique em um comando para colocá-lo no chat.")
                 .withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC), false);
@@ -276,7 +248,11 @@ final class VipEvents {
             long temporary = kit.items.stream().filter(VipStore.KitItem::temporary).count();
             long permanent = kit.items.size() - temporary;
             ctx.getSource().sendSuccess(() -> Component.literal("• ").withStyle(ChatFormatting.DARK_GRAY)
-                    .append(Component.literal(kit.name).withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
+                    .append(Component.literal(kit.name).withStyle(style -> style.withColor(ChatFormatting.AQUA)
+                            .withBold(true).withUnderlined(true)
+                            .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/vip kit ver " + kit.name))
+                            .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                    Component.literal("Clique para abrir a vitrine")))))
                     .append(Component.literal("  Plano: ").withStyle(ChatFormatting.GRAY))
                     .append(Component.literal(kit.plan).withStyle(ChatFormatting.GOLD))
                     .append(Component.literal("  |  ⌛ " + temporary + " temporários")
@@ -466,10 +442,6 @@ final class VipEvents {
         return 1;
     }
 
-    private int listKits(CommandContext<CommandSourceStack> ctx) {
-        return listPublicKits(ctx);
-    }
-
     private int requestDeleteKit(CommandContext<CommandSourceStack> ctx) {
         String name = StringArgumentType.getString(ctx, "nome").toLowerCase();
         if (!service.data(ctx.getSource().getServer()).data.kits.containsKey(name)) {
@@ -494,23 +466,31 @@ final class VipEvents {
 
     private int grant(CommandContext<CommandSourceStack> ctx, int days, boolean confirmed) throws CommandSyntaxException {
         ServerPlayer staff = ctx.getSource().getPlayerOrException();
-        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        String nick = StringArgumentType.getString(ctx, "player");
+        ServerPlayer target = ctx.getSource().getServer().getPlayerList().getPlayerByName(nick);
+        OfflinePlayer offline = target == null ? resolveOffline(ctx.getSource(), nick) :
+                new OfflinePlayer(target.getUUID(), target.getName().getString());
+        if (offline == null) return 0;
         String kit = StringArgumentType.getString(ctx, "kit");
         VipStore.Profile existing = service.data(ctx.getSource().getServer()).data.profiles
-                .get(target.getUUID().toString());
+                .get(offline.id.toString());
         if (!confirmed && existing != null && existing.expiresAt() > System.currentTimeMillis()) {
-            sendConfirmation(ctx.getSource(), target.getName().getString() + " já possui o plano "
+            sendConfirmation(ctx.getSource(), offline.name + " já possui o plano "
                     + existing.plan() + ". Substituir pelo kit " + kit + "?", "/vip dar " + kit + " "
-                    + target.getName().getString() + " " + days + " confirmar");
+                    + offline.name + " " + days + " confirmar");
             return 0;
         }
-        if (!service.grant(staff, target, kit, days)) {
+        boolean delivered = target != null ? service.grant(staff, target, kit, days)
+                : service.queueDelivery(ctx.getSource().getServer(), offline.id, offline.name, kit, days,
+                        staff.getName().getString());
+        if (!delivered) {
             ctx.getSource().sendFailure(Component.literal("Kit inexistente.")); return 0;
         }
-        ctx.getSource().sendSuccess(() -> Component.literal("✔ VIP ENTREGUE\n")
+        String deliveryStatus = target == null ? "AGENDADO PARA O PRÓXIMO LOGIN" : "ENTREGUE";
+        ctx.getSource().sendSuccess(() -> Component.literal("✔ VIP " + deliveryStatus + "\n")
                 .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD)
                 .append(Component.literal("Jogador: ").withStyle(ChatFormatting.GRAY))
-                .append(target.getDisplayName().copy().withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
+                .append(Component.literal(offline.name).withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
                 .append(Component.literal("\nKit: ").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(kit).withStyle(ChatFormatting.GOLD))
                 .append(Component.literal("  |  Duração: ").withStyle(ChatFormatting.GRAY))
@@ -518,68 +498,31 @@ final class VipEvents {
         return 1;
     }
 
-    private int renew(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+    private int renew(CommandContext<CommandSourceStack> ctx, boolean deliverKit) throws CommandSyntaxException {
         ServerPlayer staff = ctx.getSource().getPlayerOrException();
-        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        String nick = StringArgumentType.getString(ctx, "player");
+        ServerPlayer target = ctx.getSource().getServer().getPlayerList().getPlayerByName(nick);
+        OfflinePlayer offline = target == null ? resolveOffline(ctx.getSource(), nick) :
+                new OfflinePlayer(target.getUUID(), target.getName().getString());
+        if (offline == null) return 0;
         int days = IntegerArgumentType.getInteger(ctx, "dias");
-        if (!service.renew(staff, target, days)) { ctx.getSource().sendFailure(Component.literal("O jogador não possui VIP.")); return 0; }
+        boolean renewed;
+        if (target != null) renewed = deliverKit ? service.renewAndDeliver(staff, target, days)
+                : service.renew(staff, target, days);
+        else {
+            renewed = service.renewOffline(ctx.getSource().getServer(), offline.id, offline.name, days,
+                    staff.getName().getString());
+            if (renewed && deliverKit) renewed = service.queueRenewalKit(ctx.getSource().getServer(), offline.id,
+                    offline.name, staff.getName().getString());
+        }
+        if (!renewed) { ctx.getSource().sendFailure(Component.literal("O jogador não possui VIP ou o kit não existe.")); return 0; }
         ctx.getSource().sendSuccess(() -> Component.literal("✔ VIP de ").withStyle(ChatFormatting.GREEN)
-                .append(target.getDisplayName().copy().withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
+                .append(Component.literal(offline.name).withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
                 .append(Component.literal(" renovado por ").withStyle(ChatFormatting.GREEN))
-                .append(Component.literal(days + " dias").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)), true);
-        return 1;
-    }
-
-    private int renewWithKit(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        ServerPlayer staff = ctx.getSource().getPlayerOrException();
-        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
-        int days = IntegerArgumentType.getInteger(ctx, "dias");
-        if (!service.renewAndDeliver(staff, target, days)) {
-            ctx.getSource().sendFailure(Component.literal("O jogador não possui VIP ou o kit foi removido.")); return 0;
-        }
-        ctx.getSource().sendSuccess(() -> Component.literal("✔ VIP renovado e kit entregue novamente.")
-                .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD), true);
-        return 1;
-    }
-
-    private int deliverPermanent(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        ServerPlayer staff = ctx.getSource().getPlayerOrException();
-        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
-        String kit = StringArgumentType.getString(ctx, "kit");
-        if (!service.deliverPermanentItems(staff, target, kit)) {
-            ctx.getSource().sendFailure(Component.literal("Kit inexistente.")); return 0;
-        }
-        ctx.getSource().sendSuccess(() -> Component.literal("✔ Somente os itens permanentes foram entregues.")
-                .withStyle(ChatFormatting.GREEN), true);
-        return 1;
-    }
-
-    private int queueOffline(CommandContext<CommandSourceStack> ctx, int days) throws CommandSyntaxException {
-        String nick = StringArgumentType.getString(ctx, "nick");
-        OfflinePlayer player = resolveOffline(ctx.getSource(), nick);
-        if (player == null) return 0;
-        String kit = StringArgumentType.getString(ctx, "kit");
-        String staff = ctx.getSource().getPlayerOrException().getName().getString();
-        if (!service.queueDelivery(ctx.getSource().getServer(), player.id, player.name, kit, days, staff)) {
-            ctx.getSource().sendFailure(Component.literal("Kit inexistente.")); return 0;
-        }
-        ctx.getSource().sendSuccess(() -> Component.literal("✔ Entrega de " + kit + " agendada para "
-                + player.name + ". O kit será entregue quando o jogador entrar.")
-                .withStyle(ChatFormatting.GREEN), true);
-        return 1;
-    }
-
-    private int renewOffline(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        String nick = StringArgumentType.getString(ctx, "nick");
-        OfflinePlayer player = resolveOffline(ctx.getSource(), nick);
-        if (player == null) return 0;
-        int days = IntegerArgumentType.getInteger(ctx, "dias");
-        String staff = ctx.getSource().getPlayerOrException().getName().getString();
-        if (!service.renewOffline(ctx.getSource().getServer(), player.id, player.name, days, staff)) {
-            ctx.getSource().sendFailure(Component.literal("O jogador não possui VIP registrado.")); return 0;
-        }
-        ctx.getSource().sendSuccess(() -> Component.literal("✔ VIP offline renovado por " + days + " dias.")
-                .withStyle(ChatFormatting.GREEN), true);
+                .append(Component.literal(days + " dias").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD))
+                .append(Component.literal(deliverKit ? (target == null
+                        ? " • kit agendado para o login" : " • kit entregue novamente") : "")
+                        .withStyle(ChatFormatting.GRAY)), true);
         return 1;
     }
 
@@ -735,7 +678,7 @@ final class VipEvents {
     private int requestClearHistory(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
         sendConfirmation(ctx.getSource(), "Apagar definitivamente todo o histórico de "
-                + target.getName().getString() + "?", "/vip apagarhistorico "
+                + target.getName().getString() + "?", "/vip historico apagar "
                 + target.getName().getString() + " confirmar");
         return 1;
     }
@@ -893,6 +836,11 @@ final class VipEvents {
     private java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestKits(
             CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
         return SharedSuggestionProvider.suggest(service.data(ctx.getSource().getServer()).data.kits.keySet(), builder);
+    }
+
+    private java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestPlayers(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        return SharedSuggestionProvider.suggest(ctx.getSource().getServer().getPlayerNames(), builder);
     }
 
     private java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestPlans(
