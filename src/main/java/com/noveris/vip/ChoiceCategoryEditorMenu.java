@@ -14,7 +14,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 final class ChoiceCategoryEditorMenu extends ChestMenu {
-    static final int TEMPORARY_FROM = 9, TEMPORARY_TO = 26;
+    static final int TEMPORARY_FROM = 0, TEMPORARY_TO = 26;
     static final int PERMANENT_FROM = 36, PERMANENT_TO = 53;
     private static final int SAVE_SLOT = 31, CANCEL_SLOT = 35;
     private final SimpleContainer editor;
@@ -34,8 +34,8 @@ final class ChoiceCategoryEditorMenu extends ChestMenu {
     }
 
     private void installControls() {
-        fillHeader(0, Items.ORANGE_STAINED_GLASS_PANE, "OPÇÕES TEMPORÁRIAS — expiram com o VIP", ChatFormatting.GOLD);
-        fillHeader(27, Items.LIGHT_BLUE_STAINED_GLASS_PANE, "OPÇÕES PERMANENTES — não expiram", ChatFormatting.AQUA);
+        fillHeader(27, Items.ORANGE_STAINED_GLASS_PANE,
+                "ACIMA: TEMPORÁRIOS • ABAIXO: PERMANENTES", ChatFormatting.GOLD);
         ItemStack save = new ItemStack(Items.EMERALD_BLOCK);
         save.set(DataComponents.CUSTOM_NAME, Component.literal("SALVAR CATÁLOGO • limite " + limit)
                 .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
@@ -88,5 +88,5 @@ final class ChoiceCategoryEditorMenu extends ChestMenu {
         }
     }
 
-    private boolean isHeader(int slot) { return slot >= 0 && slot < 9 || slot >= 27 && slot < 36; }
+    private boolean isHeader(int slot) { return slot >= 27 && slot < 36; }
 }

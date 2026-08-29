@@ -24,7 +24,7 @@ Os itens usados como modelo voltam para o inventário da staff depois de salvar.
 O kit funciona como pacote-base. Benefícios variáveis são cadastrados uma única vez em categorias reutilizáveis:
 
 1. `/vip catalogo criar arma 1` abre o editor e define que o jogador escolhe uma opção.
-2. A área laranja recebe opções temporárias; a azul recebe opções permanentes.
+2. As três linhas acima do separador recebem até 27 opções temporárias; as duas linhas abaixo recebem até 18 permanentes.
 3. `/vip plano catalogo adicionar soberano arma` vincula a categoria ao plano.
 4. Ao usar `/vip dar <kit> <player>`, o jogador recebe o kit-base e ganha acesso a `/vip escolher`.
 
