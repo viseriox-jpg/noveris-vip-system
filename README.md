@@ -19,6 +19,18 @@ Use `/vip kit criar <nome> <plano>`. A interface possui seis linhas:
 
 Os itens usados como modelo voltam para o inventário da staff depois de salvar. Kits existentes podem ser alterados com `/vip kit editar <nome>`.
 
+## Catálogo de escolhas
+
+O kit funciona como pacote-base. Benefícios variáveis são cadastrados uma única vez em categorias reutilizáveis:
+
+1. `/vip catalogo criar arma 1` abre o editor e define que o jogador escolhe uma opção.
+2. A área laranja recebe opções temporárias; a azul recebe opções permanentes.
+3. `/vip plano catalogo adicionar soberano arma` vincula a categoria ao plano.
+4. Ao usar `/vip dar <kit> <player>`, o jogador recebe o kit-base e ganha acesso a `/vip escolher`.
+
+Cada categoria abre separadamente e exige exatamente a quantidade configurada. A entrega só acontece ao confirmar.
+Fechar a tela preserva a pendência. Ter um perfil VIP ativo sem uma concessão administrativa não libera escolhas.
+
 ## Comandos
 
 - `/vip ajuda` — mostra somente os comandos permitidos, com exemplos clicáveis.
@@ -28,6 +40,13 @@ Os itens usados como modelo voltam para o inventário da staff depois de salvar.
 - `/vip kit editar <nome>`
 - `/vip kit listar`
 - `/vip kit excluir <nome>`
+- `/vip catalogo criar <categoria> <limite>`
+- `/vip catalogo editar <categoria> [novo limite]`
+- `/vip catalogo listar`
+- `/vip catalogo excluir <categoria>`
+- `/vip plano catalogo adicionar|remover <plano> <categoria>`
+- `/vip escolher` — disponível somente com escolhas liberadas por uma entrega administrativa.
+- `/vip escolhas <player> [resetar]`
 - `/vip plano listar`
 - `/vip plano criar <id> <nome>`
 - `/vip plano ativar|desativar <id>`

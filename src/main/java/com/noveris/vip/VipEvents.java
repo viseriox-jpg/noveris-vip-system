@@ -28,6 +28,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 
 final class VipEvents {
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
@@ -66,7 +67,33 @@ final class VipEvents {
                         .then(Commands.literal("renomear")
                                 .then(Commands.argument("id", StringArgumentType.word()).suggests(this::suggestAllPlans)
                                         .then(Commands.argument("nome", StringArgumentType.string())
-                                                .executes(this::renamePlan)))))
+                                                .executes(this::renamePlan))))
+                        .then(Commands.literal("catalogo")
+                                .then(Commands.literal("adicionar")
+                                        .then(Commands.argument("plano", StringArgumentType.word()).suggests(this::suggestAllPlans)
+                                                .then(Commands.argument("categoria", StringArgumentType.word())
+                                                        .suggests(this::suggestChoiceCategories).executes(this::linkCategory))))
+                                .then(Commands.literal("remover")
+                                        .then(Commands.argument("plano", StringArgumentType.word()).suggests(this::suggestAllPlans)
+                                                .then(Commands.argument("categoria", StringArgumentType.word())
+                                                        .suggests(this::suggestChoiceCategories).executes(this::unlinkCategory))))))
+                .then(Commands.literal("catalogo")
+                        .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).kitManage))
+                        .then(Commands.literal("criar")
+                                .then(Commands.argument("categoria", StringArgumentType.word())
+                                        .then(Commands.argument("limite", IntegerArgumentType.integer(1, 18))
+                                                .executes(this::createChoiceCategory))))
+                        .then(Commands.literal("editar")
+                                .then(Commands.argument("categoria", StringArgumentType.word())
+                                        .suggests(this::suggestChoiceCategories)
+                                        .executes(ctx -> editChoiceCategory(ctx, null))
+                                        .then(Commands.argument("limite", IntegerArgumentType.integer(1, 18))
+                                                .executes(ctx -> editChoiceCategory(ctx,
+                                                        IntegerArgumentType.getInteger(ctx, "limite"))))))
+                        .then(Commands.literal("listar").executes(this::listChoiceCategories))
+                        .then(Commands.literal("excluir")
+                                .then(Commands.argument("categoria", StringArgumentType.word())
+                                        .suggests(this::suggestChoiceCategories).executes(this::deleteChoiceCategory))))
                 .then(Commands.literal("kit")
                         .then(Commands.literal("ver")
                                 .then(Commands.argument("nome", StringArgumentType.word())
@@ -98,6 +125,12 @@ final class VipEvents {
                                                 .executes(ctx -> grant(ctx, IntegerArgumentType.getInteger(ctx, "dias"), false))
                                                 .then(Commands.literal("confirmar").executes(ctx -> grant(ctx,
                                                         IntegerArgumentType.getInteger(ctx, "dias"), true)))))))
+                .then(Commands.literal("escolher").executes(this::openChoices))
+                .then(Commands.literal("escolhas")
+                        .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).history))
+                        .then(Commands.argument("player", EntityArgument.player()).executes(this::choiceStatus)
+                                .then(Commands.literal("resetar")
+                                        .requires(source -> source.hasPermission(4)).executes(this::resetChoices))))
                 .then(Commands.literal("renovar")
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).renew))
                         .then(Commands.argument("player", EntityArgument.player())
@@ -189,9 +222,13 @@ final class VipEvents {
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), false);
         helpLine(source, "/vip kits", "Ver os kits disponíveis", "/vip kits");
         helpLine(source, "/vip kit ver <nome>", "Visualizar um kit", "/vip kit ver ");
+        helpLine(source, "/vip escolher", "Abrir escolhas liberadas pela staff", "/vip escolher");
         if (source.hasPermission(config.kitManage)) {
             helpLine(source, "/vip kit criar <nome> <plano>", "Criar um kit", "/vip kit criar ");
             helpLine(source, "/vip kit editar <nome>", "Editar um kit", "/vip kit editar ");
+            helpLine(source, "/vip catalogo criar <categoria> <limite>", "Criar opções de escolha", "/vip catalogo criar ");
+            helpLine(source, "/vip plano catalogo adicionar <plano> <categoria>",
+                    "Vincular escolhas a um plano", "/vip plano catalogo adicionar ");
         }
         if (source.hasPermission(config.grant)) {
             helpLine(source, "/vip dar <kit> <player> [dias]", "Entregar VIP", "/vip dar ");
@@ -299,6 +336,105 @@ final class VipEvents {
         store.save();
         ctx.getSource().sendSuccess(() -> Component.literal("Nome de exibição alterado para " + name + ".")
                 .withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    private int createChoiceCategory(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        String name = StringArgumentType.getString(ctx, "categoria").toLowerCase();
+        int limit = IntegerArgumentType.getInteger(ctx, "limite");
+        if (service.data(ctx.getSource().getServer()).data.choiceCategories.containsKey(name)) {
+            ctx.getSource().sendFailure(Component.literal("Essa categoria já existe. Use /vip catalogo editar."));
+            return 0;
+        }
+        service.openChoiceCategoryEditor(ctx.getSource().getPlayerOrException(), name, limit);
+        return 1;
+    }
+
+    private int editChoiceCategory(CommandContext<CommandSourceStack> ctx, Integer requestedLimit)
+            throws CommandSyntaxException {
+        String name = StringArgumentType.getString(ctx, "categoria").toLowerCase();
+        VipStore.ChoiceCategory category = service.data(ctx.getSource().getServer()).data.choiceCategories.get(name);
+        if (category == null) { ctx.getSource().sendFailure(Component.literal("Categoria inexistente.")); return 0; }
+        service.openChoiceCategoryEditor(ctx.getSource().getPlayerOrException(), name,
+                requestedLimit == null ? category.limit : requestedLimit);
+        return 1;
+    }
+
+    private int listChoiceCategories(CommandContext<CommandSourceStack> ctx) {
+        VipStore store = service.data(ctx.getSource().getServer());
+        if (store.data.choiceCategories.isEmpty()) {
+            ctx.getSource().sendFailure(Component.literal("Nenhuma categoria de escolha foi criada."));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.literal("✦ CATÁLOGOS DE ESCOLHA ✦")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), false);
+        store.data.choiceCategories.forEach((name, category) -> {
+            long temporary = category.items.stream().filter(VipStore.ChoiceItem::temporary).count();
+            long permanent = category.items.size() - temporary;
+            List<String> plans = store.data.planChoiceCategories.entrySet().stream()
+                    .filter(entry -> entry.getValue().contains(name)).map(Map.Entry::getKey).toList();
+            ctx.getSource().sendSuccess(() -> Component.literal("• " + name).withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD)
+                    .append(Component.literal(" | escolhe " + category.limit + " | " + temporary + " temporários | "
+                            + permanent + " permanentes | planos: "
+                            + (plans.isEmpty() ? "nenhum" : String.join(", ", plans))).withStyle(ChatFormatting.GRAY)), false);
+        });
+        return store.data.choiceCategories.size();
+    }
+
+    private int deleteChoiceCategory(CommandContext<CommandSourceStack> ctx) {
+        String name = StringArgumentType.getString(ctx, "categoria").toLowerCase();
+        if (!service.deleteChoiceCategory(ctx.getSource().getServer(), name)) {
+            ctx.getSource().sendFailure(Component.literal("Categoria inexistente.")); return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.literal("Categoria " + name + " excluída e desvinculada dos planos.")
+                .withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    private int linkCategory(CommandContext<CommandSourceStack> ctx) {
+        String plan = StringArgumentType.getString(ctx, "plano").toLowerCase();
+        String category = StringArgumentType.getString(ctx, "categoria").toLowerCase();
+        if (!service.linkChoiceCategory(ctx.getSource().getServer(), plan, category)) {
+            ctx.getSource().sendFailure(Component.literal("Plano ou categoria inexistente.")); return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.literal("Categoria " + category + " vinculada ao plano " + plan + ".")
+                .withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    private int unlinkCategory(CommandContext<CommandSourceStack> ctx) {
+        String plan = StringArgumentType.getString(ctx, "plano").toLowerCase();
+        String category = StringArgumentType.getString(ctx, "categoria").toLowerCase();
+        if (!service.unlinkChoiceCategory(ctx.getSource().getServer(), plan, category)) {
+            ctx.getSource().sendFailure(Component.literal("Esse vínculo não existe.")); return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.literal("Categoria " + category + " removida do plano " + plan + ".")
+                .withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    private int openChoices(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        return service.openChoices(ctx.getSource().getPlayerOrException()) ? 1 : 0;
+    }
+
+    private int choiceStatus(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        String status = service.choiceStatus(target);
+        ctx.getSource().sendSuccess(() -> Component.literal("Escolhas de ").withStyle(ChatFormatting.GOLD)
+                .append(target.getDisplayName().copy().withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
+                .append(Component.literal(": " + status).withStyle(ChatFormatting.GRAY)), false);
+        return 1;
+    }
+
+    private int resetChoices(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer staff = ctx.getSource().getPlayerOrException();
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        if (!service.resetChoices(staff, target)) {
+            ctx.getSource().sendFailure(Component.literal("O jogador não possui VIP ativo ou o plano não tem catálogos."));
+            return 0;
+        }
+        ctx.getSource().sendSuccess(() -> Component.literal("Escolhas de " + target.getName().getString() + " resetadas.")
+                .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD), true);
         return 1;
     }
 
@@ -768,6 +904,12 @@ final class VipEvents {
     private java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestAllPlans(
             CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
         return SharedSuggestionProvider.suggest(service.data(ctx.getSource().getServer()).data.plans.keySet(), builder);
+    }
+
+    private java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestChoiceCategories(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        return SharedSuggestionProvider.suggest(
+                service.data(ctx.getSource().getServer()).data.choiceCategories.keySet(), builder);
     }
 
     @SubscribeEvent public void tick(ServerTickEvent.Post event) { service.tick(event.getServer()); }

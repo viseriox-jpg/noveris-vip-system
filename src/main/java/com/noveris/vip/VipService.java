@@ -82,6 +82,165 @@ final class VipService {
         }
     }
 
+    void openChoiceCategoryEditor(ServerPlayer staff, String name, int limit) {
+        VipStore current = store(staff.getServer());
+        SimpleContainer editor = new SimpleContainer(54);
+        VipStore.ChoiceCategory existing = current.data.choiceCategories.get(name.toLowerCase());
+        if (existing != null) {
+            int temporary = ChoiceCategoryEditorMenu.TEMPORARY_FROM;
+            int permanent = ChoiceCategoryEditorMenu.PERMANENT_FROM;
+            for (VipStore.ChoiceItem item : existing.items) {
+                int slot = item.temporary() ? temporary++ : permanent++;
+                int end = item.temporary() ? ChoiceCategoryEditorMenu.TEMPORARY_TO
+                        : ChoiceCategoryEditorMenu.PERMANENT_TO;
+                if (slot <= end) editor.setItem(slot, VipStore.decode(item.encodedStack(), staff.registryAccess()).copy());
+            }
+        }
+        staff.openMenu(new SimpleMenuProvider((id, inventory, player) ->
+                new ChoiceCategoryEditorMenu(id, inventory, editor, this, name.toLowerCase(), limit),
+                Component.literal("Catálogo VIP — " + name + " • escolha " + limit)));
+    }
+
+    void saveChoiceCategory(ServerPlayer staff, String name, int limit, SimpleContainer editor) {
+        VipStore current = store(staff.getServer());
+        VipStore.ChoiceCategory category = new VipStore.ChoiceCategory(name, limit);
+        saveChoiceRange(staff, editor, category, ChoiceCategoryEditorMenu.TEMPORARY_FROM,
+                ChoiceCategoryEditorMenu.TEMPORARY_TO, true);
+        saveChoiceRange(staff, editor, category, ChoiceCategoryEditorMenu.PERMANENT_FROM,
+                ChoiceCategoryEditorMenu.PERMANENT_TO, false);
+        current.data.choiceCategories.put(name.toLowerCase(), category);
+        current.addHistory(staff.getUUID(), staff.getName().getString(), "CATALOGO_SALVO",
+                name + " | limite: " + limit + " | opções: " + category.items.size());
+        current.save();
+        staff.sendSystemMessage(Component.literal("Catálogo " + name + " salvo com " + category.items.size()
+                + " opções e limite de " + limit + ".").withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
+    }
+
+    private void saveChoiceRange(ServerPlayer staff, SimpleContainer editor, VipStore.ChoiceCategory category,
+                                 int from, int to, boolean temporary) {
+        for (int slot = from; slot <= to; slot++) {
+            ItemStack stack = editor.getItem(slot);
+            if (!stack.isEmpty()) category.items.add(new VipStore.ChoiceItem(
+                    VipStore.encode(stack.copy(), staff.registryAccess()), temporary));
+        }
+    }
+
+    boolean linkChoiceCategory(MinecraftServer server, String plan, String category) {
+        VipStore current = store(server);
+        if (!current.data.plans.containsKey(plan) || !current.data.choiceCategories.containsKey(category)) return false;
+        List<String> categories = current.data.planChoiceCategories.computeIfAbsent(plan,
+                ignored -> new java.util.ArrayList<>());
+        if (!categories.contains(category)) categories.add(category);
+        current.save();
+        return true;
+    }
+
+    boolean unlinkChoiceCategory(MinecraftServer server, String plan, String category) {
+        VipStore current = store(server);
+        List<String> categories = current.data.planChoiceCategories.get(plan);
+        if (categories == null || !categories.remove(category)) return false;
+        current.save();
+        return true;
+    }
+
+    boolean deleteChoiceCategory(MinecraftServer server, String category) {
+        VipStore current = store(server);
+        if (current.data.choiceCategories.remove(category) == null) return false;
+        current.data.planChoiceCategories.values().forEach(list -> list.remove(category));
+        current.data.pendingChoices.values().forEach(pending -> pending.remainingCategories.remove(category));
+        current.save();
+        return true;
+    }
+
+    private void createPendingChoices(VipStore current, UUID playerId, String playerName,
+                                      String plan, String kit) {
+        List<String> categories = current.data.planChoiceCategories.getOrDefault(plan, List.of()).stream()
+                .filter(current.data.choiceCategories::containsKey).distinct().toList();
+        if (categories.isEmpty()) current.data.pendingChoices.remove(playerId.toString());
+        else current.data.pendingChoices.put(playerId.toString(),
+                new VipStore.PendingChoices(playerName, plan, kit, categories));
+    }
+
+    boolean openChoices(ServerPlayer player) {
+        VipStore current = store(player.getServer());
+        String key = player.getUUID().toString();
+        VipStore.PendingChoices pending = current.data.pendingChoices.get(key);
+        VipStore.Profile profile = current.data.profiles.get(key);
+        if (pending == null || profile == null || profile.expiresAt() <= System.currentTimeMillis()) {
+            if (pending != null) { current.data.pendingChoices.remove(key); current.save(); }
+            player.sendSystemMessage(Component.literal("Você não possui escolhas pendentes. Elas são liberadas por /vip dar.")
+                    .withStyle(ChatFormatting.RED));
+            return false;
+        }
+        pending.remainingCategories.removeIf(name -> !current.data.choiceCategories.containsKey(name));
+        if (pending.remainingCategories.isEmpty()) {
+            current.data.pendingChoices.remove(key);
+            current.save();
+            player.sendSystemMessage(Component.literal("Todas as escolhas deste VIP já foram concluídas.")
+                    .withStyle(ChatFormatting.GREEN));
+            return false;
+        }
+        String categoryName = pending.remainingCategories.getFirst();
+        VipStore.ChoiceCategory category = current.data.choiceCategories.get(categoryName);
+        SimpleContainer display = new SimpleContainer(54);
+        player.openMenu(new SimpleMenuProvider((id, inventory, ignored) ->
+                new ChoiceSelectionMenu(id, inventory, display, this, categoryName, category),
+                Component.literal("Escolha VIP — " + categoryName + " • " + category.limit)));
+        return true;
+    }
+
+    boolean completeChoice(ServerPlayer player, String categoryName, List<Integer> indexes) {
+        VipStore current = store(player.getServer());
+        String key = player.getUUID().toString();
+        VipStore.PendingChoices pending = current.data.pendingChoices.get(key);
+        VipStore.Profile profile = current.data.profiles.get(key);
+        VipStore.ChoiceCategory category = current.data.choiceCategories.get(categoryName);
+        if (pending == null || profile == null || category == null || profile.expiresAt() <= System.currentTimeMillis()
+                || pending.remainingCategories.isEmpty() || !pending.remainingCategories.getFirst().equals(categoryName)) return false;
+        List<Integer> unique = indexes.stream().distinct().toList();
+        int required = Math.min(category.limit, Math.min(45, category.items.size()));
+        if (unique.size() != required || unique.stream().anyMatch(index -> index < 0 || index >= category.items.size())) return false;
+        List<String> names = new java.util.ArrayList<>();
+        for (int index : unique) {
+            VipStore.ChoiceItem option = category.items.get(index);
+            ItemStack stack = VipStore.decode(option.encodedStack(), player.registryAccess()).copy();
+            names.add(stack.getHoverName().getString());
+            if (option.temporary()) VipItemData.attach(stack, player.getUUID(), player.getName().getString(),
+                    pending.kit + "/" + categoryName, profile.expiresAt());
+            if (!player.getInventory().add(stack)) player.drop(stack, false);
+        }
+        pending.selections.put(categoryName, names);
+        pending.remainingCategories.removeFirst();
+        current.addHistory(player.getUUID(), player.getName().getString(), "ESCOLHA_VIP_CONCLUIDA",
+                categoryName + " | " + String.join(", ", names));
+        boolean finished = pending.remainingCategories.isEmpty();
+        if (finished) current.data.pendingChoices.remove(key);
+        current.save();
+        player.sendSystemMessage(Component.literal(finished ? "✔ Todas as escolhas foram entregues."
+                : "✔ Categoria concluída. Abrindo a próxima escolha...")
+                .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
+        return true;
+    }
+
+    String choiceStatus(ServerPlayer target) {
+        VipStore.PendingChoices pending = store(target.getServer()).data.pendingChoices.get(target.getUUID().toString());
+        if (pending == null) return "nenhuma escolha pendente";
+        return "plano " + pending.plan + " | restantes: " + String.join(", ", pending.remainingCategories)
+                + " | concluídas: " + String.join(", ", pending.selections.keySet());
+    }
+
+    boolean resetChoices(ServerPlayer staff, ServerPlayer target) {
+        VipStore current = store(target.getServer());
+        VipStore.Profile profile = current.data.profiles.get(target.getUUID().toString());
+        if (profile == null || profile.expiresAt() <= System.currentTimeMillis()
+                || !current.data.choiceEligiblePlayers.contains(target.getUUID().toString())) return false;
+        createPendingChoices(current, target.getUUID(), target.getName().getString(), profile.plan(), profile.kit());
+        current.addHistory(target.getUUID(), target.getName().getString(), "ESCOLHAS_RESETADAS",
+                "staff: " + staff.getName().getString());
+        current.save();
+        return current.data.pendingChoices.containsKey(target.getUUID().toString());
+    }
+
     boolean grant(ServerPlayer staff, ServerPlayer target, String kitName, int days) {
         VipStore current = store(staff.getServer());
         VipStore.Kit kit = current.data.kits.get(kitName.toLowerCase());
@@ -100,8 +259,10 @@ final class VipService {
                 kit.plan + " | kit: " + kit.name + " | " + days + " dias | staff: " + staff.getName().getString());
         current.addHistory(staff.getUUID(), staff.getName().getString(), "VIP_ENTREGUE",
                 target.getName().getString() + " | kit: " + kit.name);
-        current.save();
+        current.data.choiceEligiblePlayers.add(target.getUUID().toString());
+        createPendingChoices(current, target.getUUID(), target.getName().getString(), kit.plan, kit.name);
         current.data.sentWarnings.remove(target.getUUID().toString());
+        current.save();
         target.sendSystemMessage(Component.literal("✦ VIP ATIVADO ✦\n")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
                 .append(Component.literal("Plano: ").withStyle(ChatFormatting.GRAY))
@@ -110,6 +271,9 @@ final class VipService {
                 .append(Component.literal(kit.name).withStyle(ChatFormatting.AQUA))
                 .append(Component.literal("\nDuração: ").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(days + " dias").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)));
+        if (current.data.pendingChoices.containsKey(target.getUUID().toString()))
+            target.sendSystemMessage(Component.literal("Você recebeu escolhas de benefícios. Use /vip escolher.")
+                    .withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD));
         return true;
     }
 
@@ -121,6 +285,8 @@ final class VipService {
         long expiresAt = now + minutes * 60_000L;
         current.data.profiles.put(target.getUUID().toString(), new VipStore.Profile(
                 target.getName().getString(), kit.plan, kit.name, now, expiresAt));
+        current.data.choiceEligiblePlayers.remove(target.getUUID().toString());
+        current.data.pendingChoices.remove(target.getUUID().toString());
         int delivered = 0;
         for (VipStore.KitItem template : kit.items) {
             if (!template.temporary()) continue;
@@ -200,6 +366,8 @@ final class VipService {
             });
         }
         current.data.sentWarnings.remove(target.getUUID().toString());
+        current.data.pendingChoices.remove(target.getUUID().toString());
+        current.data.choiceEligiblePlayers.remove(target.getUUID().toString());
         current.addHistory(target.getUUID(), target.getName().getString(), "VIP_REMOVIDO",
                 "plano: " + removed.plan() + " | staff: " + staff.getName().getString());
         current.save();
@@ -258,8 +426,13 @@ final class VipService {
         }
         current.addHistory(target.getUUID(), target.getName().getString(), "VIP_ENTREGUE_AO_ENTRAR",
                 "kit: " + kit.name + " | staff: " + pending.staffName());
+        current.data.choiceEligiblePlayers.add(target.getUUID().toString());
+        createPendingChoices(current, target.getUUID(), target.getName().getString(), kit.plan, kit.name);
         target.sendSystemMessage(Component.literal("✦ SEU VIP PENDENTE FOI ENTREGUE ✦")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+        if (current.data.pendingChoices.containsKey(target.getUUID().toString()))
+            target.sendSystemMessage(Component.literal("Use /vip escolher para selecionar seus benefícios.")
+                    .withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD));
     }
 
     private void updateExpiry(ServerPlayer player, long expiry) {

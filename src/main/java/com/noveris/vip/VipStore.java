@@ -95,6 +95,14 @@ final class VipStore {
             Profile profile = data.profiles.get(entry.getKey());
             return profile == null || profile.expiresAt() <= now;
         });
+        data.pendingChoices.entrySet().removeIf(entry -> {
+            Profile profile = data.profiles.get(entry.getKey());
+            return profile == null || profile.expiresAt() <= now;
+        });
+        data.choiceEligiblePlayers.removeIf(key -> {
+            Profile profile = data.profiles.get(key);
+            return profile == null || profile.expiresAt() <= now;
+        });
     }
 
     static String encode(ItemStack stack, HolderLookup.Provider registries) {
@@ -124,6 +132,10 @@ final class VipStore {
         Map<String, List<Integer>> sentWarnings;
         Set<String> retiredItemIds;
         Map<String, RetiredItem> retiredItems;
+        Map<String, ChoiceCategory> choiceCategories;
+        Map<String, List<String>> planChoiceCategories;
+        Map<String, PendingChoices> pendingChoices;
+        Set<String> choiceEligiblePlayers;
         Data normalize() {
             if (kits == null) kits = new HashMap<>();
             if (profiles == null) profiles = new HashMap<>();
@@ -143,6 +155,10 @@ final class VipStore {
             long migratedAt = System.currentTimeMillis();
             retiredItemIds.forEach(id -> retiredItems.putIfAbsent(id,
                     new RetiredItem(migratedAt, "Item legado", "desconhecido", "desconhecido")));
+            if (choiceCategories == null) choiceCategories = new LinkedHashMap<>();
+            if (planChoiceCategories == null) planChoiceCategories = new HashMap<>();
+            if (pendingChoices == null) pendingChoices = new HashMap<>();
+            if (choiceEligiblePlayers == null) choiceEligiblePlayers = new HashSet<>();
             return this;
         }
     }
@@ -161,4 +177,28 @@ final class VipStore {
     record PlanDefinition(String id, String displayName, boolean enabled, int order) {}
     record PendingDelivery(String playerName, String kit, int days, String staffName, long queuedAt) {}
     record RetiredItem(long retiredAt, String itemName, String kit, String originalOwner) {}
+    static final class ChoiceCategory {
+        String name;
+        int limit;
+        List<ChoiceItem> items = new ArrayList<>();
+        ChoiceCategory() {}
+        ChoiceCategory(String name, int limit) { this.name = name; this.limit = limit; }
+    }
+    record ChoiceItem(String encodedStack, boolean temporary) {}
+    static final class PendingChoices {
+        String playerName;
+        String plan;
+        String kit;
+        long createdAt;
+        List<String> remainingCategories = new ArrayList<>();
+        Map<String, List<String>> selections = new LinkedHashMap<>();
+        PendingChoices() {}
+        PendingChoices(String playerName, String plan, String kit, List<String> categories) {
+            this.playerName = playerName;
+            this.plan = plan;
+            this.kit = kit;
+            this.createdAt = System.currentTimeMillis();
+            this.remainingCategories.addAll(categories);
+        }
+    }
 }
