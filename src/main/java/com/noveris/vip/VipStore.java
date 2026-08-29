@@ -103,6 +103,7 @@ final class VipStore {
             Profile profile = data.profiles.get(key);
             return profile == null || profile.expiresAt() <= now;
         });
+        data.completedChoiceGrants.retainAll(data.choiceEligiblePlayers);
     }
 
     static String encode(ItemStack stack, HolderLookup.Provider registries) {
@@ -136,6 +137,7 @@ final class VipStore {
         Map<String, List<String>> planChoiceCategories;
         Map<String, PendingChoices> pendingChoices;
         Set<String> choiceEligiblePlayers;
+        Set<String> completedChoiceGrants;
         Data normalize() {
             if (kits == null) kits = new HashMap<>();
             if (profiles == null) profiles = new HashMap<>();
@@ -159,6 +161,7 @@ final class VipStore {
             if (planChoiceCategories == null) planChoiceCategories = new HashMap<>();
             if (pendingChoices == null) pendingChoices = new HashMap<>();
             if (choiceEligiblePlayers == null) choiceEligiblePlayers = new HashSet<>();
+            if (completedChoiceGrants == null) completedChoiceGrants = new HashSet<>();
             return this;
         }
     }
