@@ -81,6 +81,7 @@ O inventário, armadura, mão secundária e Ender Chest dos jogadores conectados
 Itens dropados passam por verificação periódica. Recipientes vanilla encontrados durante o carregamento de chunks entram em uma fila e são verificados gradualmente, com limite de oito recipientes por tick, evitando atrasar a abertura do mundo. Pilhas divididas recebem novas identificações de rastreamento, mantendo proprietário, kit e vencimento. Integrações com inventários internos de mods dependem de esses inventários exporem seus itens ao Minecraft/NeoForge.
 
 O jogador recebe avisos configuráveis antes do vencimento. Os padrões são 7, 3 e 1 dia. Níveis de permissão e dias de aviso ficam em `serverconfig/noveris_vip_system-server.toml`.
+Quando o prazo termina, o vencimento é processado uma única vez: itens são recolhidos, o perfil ativo e as escolhas são encerrados, o histórico recebe `VIP_EXPIRADO` e o jogador vê apenas um título e uma mensagem no chat.
 O mesmo arquivo configura `history_retention_days` e `retired_item_retention_days`. A limpeza automática
 remove históricos antigos, avisos obsoletos e identificadores aposentados após os prazos definidos.
 

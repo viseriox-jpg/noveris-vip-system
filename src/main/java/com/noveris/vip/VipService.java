@@ -2,6 +2,9 @@ package com.noveris.vip;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.MenuProvider;
@@ -659,15 +662,7 @@ final class VipService {
         List<Integer> sent = current.data.sentWarnings.computeIfAbsent(player.getUUID().toString(),
                 ignored -> new java.util.ArrayList<>());
         if (profile.expiresAt() <= now) {
-            if (!sent.contains(0)) {
-                sent.add(0);
-                player.sendSystemMessage(Component.literal("✦ O TEMPO DA CONCESSÃO TERMINOU ✦")
-                        .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD)
-                        .append(Component.literal("\nSeu título foi recolhido. As relíquias vinculadas a ele "
-                                + "permanecerão sob custódia por sete dias.")
-                                .withStyle(ChatFormatting.GRAY)));
-                current.save();
-            }
+            finalizeExpiredVip(current, player, profile);
             return;
         }
         long remainingDays = Math.max(1, (profile.expiresAt() - now + 86_399_999L) / 86_400_000L);
@@ -687,6 +682,31 @@ final class VipService {
                 current.save();
             }
         }
+    }
+
+    private void finalizeExpiredVip(VipStore current, ServerPlayer player, VipStore.Profile profile) {
+        String key = player.getUUID().toString();
+        current.data.profiles.remove(key);
+        current.data.sentWarnings.remove(key);
+        current.data.pendingChoices.remove(key);
+        current.data.choiceEligiblePlayers.remove(key);
+        current.data.completedChoiceGrants.remove(key);
+        current.data.pendingDeliveries.remove(key);
+        current.addHistory(player.getUUID(), player.getName().getString(), "VIP_EXPIRADO",
+                "plano: " + profile.plan() + " | kit: " + profile.kit()
+                        + " | relíquias recolhidas ao cofre por sete dias");
+
+        player.connection.send(new ClientboundSetTitlesAnimationPacket(10, 80, 20));
+        player.connection.send(new ClientboundSetTitleTextPacket(
+                Component.literal("O TÍTULO FOI RECOLHIDO").withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD)));
+        player.connection.send(new ClientboundSetSubtitleTextPacket(
+                Component.literal("O tempo da concessão terminou").withStyle(ChatFormatting.GRAY)));
+        player.sendSystemMessage(Component.literal("✦ O TEMPO DA CONCESSÃO TERMINOU ✦")
+                .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD)
+                .append(Component.literal("\nSeu título chegou ao fim. As relíquias vinculadas foram recolhidas "
+                        + "e permanecerão sob custódia por sete dias.")
+                        .withStyle(ChatFormatting.GRAY)));
+        current.save();
     }
 
     private String planFlavor(String plan) {
