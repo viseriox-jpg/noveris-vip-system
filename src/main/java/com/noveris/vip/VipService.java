@@ -136,13 +136,17 @@ final class VipService {
         if (profile == null || profile.expiresAt() <= System.currentTimeMillis()
                 || !current.data.choiceEligiblePlayers.contains(key)) {
             if (pending != null) { current.data.pendingChoices.remove(key); current.save(); }
-            player.sendSystemMessage(Component.literal("Você não possui uma liberação de escolhas feita por /vip dar.")
-                    .withStyle(ChatFormatting.RED));
+            player.sendSystemMessage(Component.literal("Nenhuma decisão aguarda por você.")
+                    .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD)
+                    .append(Component.literal("\nO direito de escolha ainda não foi concedido ao seu nome.")
+                            .withStyle(ChatFormatting.GRAY)));
             return false;
         }
         if (pending == null && current.data.completedChoiceGrants.contains(key)) {
-            player.sendSystemMessage(Component.literal("Todas as escolhas desta entrega já foram concluídas.")
-                    .withStyle(ChatFormatting.GREEN));
+            player.sendSystemMessage(Component.literal("✦ SUA DECISÃO JÁ FOI SELADA ✦")
+                    .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
+                    .append(Component.literal("\nAs relíquias escolhidas já lhe foram confiadas.")
+                            .withStyle(ChatFormatting.GRAY)));
             return false;
         }
         if (pending == null) {
@@ -150,10 +154,10 @@ final class VipService {
             pending = current.data.pendingChoices.get(key);
             current.save();
             if (pending == null) {
-                player.sendSystemMessage(Component.literal("O plano " + profile.plan()
-                        + " ainda não possui categorias vinculadas. A staff deve usar "
-                        + "/vip catalogo vincular <categoria> <plano>.")
-                        .withStyle(ChatFormatting.YELLOW));
+                player.sendSystemMessage(Component.literal("Nenhuma decisão aguarda por você.")
+                        .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)
+                        .append(Component.literal("\nSeu título ainda não possui relíquias destinadas à escolha.")
+                                .withStyle(ChatFormatting.GRAY)));
                 return false;
             }
         }
@@ -161,8 +165,8 @@ final class VipService {
         if (pending.remainingCategories.isEmpty()) {
             current.data.pendingChoices.remove(key);
             current.save();
-            player.sendSystemMessage(Component.literal("Todas as escolhas deste VIP já foram concluídas.")
-                    .withStyle(ChatFormatting.GREEN));
+            player.sendSystemMessage(Component.literal("✦ SUA DECISÃO JÁ FOI SELADA ✦")
+                    .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
             return false;
         }
         String categoryName = pending.remainingCategories.getFirst();
@@ -204,9 +208,13 @@ final class VipService {
             current.data.completedChoiceGrants.add(key);
         }
         current.save();
-        player.sendSystemMessage(Component.literal(finished ? "✔ Todas as escolhas foram entregues."
-                : "✔ Categoria concluída. Abrindo a próxima escolha...")
-                .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
+        player.sendSystemMessage(Component.literal(finished ? "✦ SUA DECISÃO FOI SELADA ✦"
+                : "✦ UMA DECISÃO FOI SELADA ✦")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
+                .append(Component.literal(finished
+                        ? "\nAs relíquias escolhidas agora carregam o seu nome."
+                        : "\nUma nova escolha se abre diante de você.")
+                        .withStyle(ChatFormatting.YELLOW)));
         return true;
     }
 
@@ -259,17 +267,23 @@ final class VipService {
         createPendingChoices(current, target.getUUID(), target.getName().getString(), kit.plan, kit.name);
         current.data.sentWarnings.remove(target.getUUID().toString());
         current.save();
-        target.sendSystemMessage(Component.literal("✦ VIP ATIVADO ✦\n")
+        target.sendSystemMessage(Component.literal("✦ UM NOVO TÍTULO LHE FOI CONCEDIDO ✦\n")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
+                .append(Component.literal(planFlavor(kit.plan) + "\n\n").withStyle(ChatFormatting.YELLOW))
                 .append(Component.literal("Plano: ").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(kit.plan).withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD))
                 .append(Component.literal("  |  Kit: ").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(kit.name).withStyle(ChatFormatting.AQUA))
                 .append(Component.literal("\nDuração: ").withStyle(ChatFormatting.GRAY))
-                .append(Component.literal(days + " dias").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)));
+                .append(Component.literal(days + " dias").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD))
+                .append(Component.literal("\nAs relíquias de seu título foram confiadas a você.")
+                        .withStyle(ChatFormatting.GOLD, ChatFormatting.ITALIC)));
         if (current.data.pendingChoices.containsKey(target.getUUID().toString()))
-            target.sendSystemMessage(Component.literal("Você recebeu escolhas de benefícios. Use /vip escolher.")
-                    .withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD));
+            target.sendSystemMessage(Component.literal("✦ O DIREITO DE ESCOLHA LHE FOI CONCEDIDO ✦")
+                    .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
+                    .append(Component.literal("\nDefina as relíquias que carregarão seu nome: ")
+                            .withStyle(ChatFormatting.YELLOW))
+                    .append(Component.literal("/vip escolher").withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD)));
         return true;
     }
 
@@ -315,6 +329,12 @@ final class VipService {
         current.addHistory(target.getUUID(), target.getName().getString(), "VIP_RENOVADO",
                 days + " dias | staff: " + staff.getName().getString());
         current.save();
+        target.sendSystemMessage(Component.literal("✦ SEU TÍTULO PERMANECE ✦")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
+                .append(Component.literal("\nO tempo de sua concessão foi estendido por ")
+                        .withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(days + " dias").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD))
+                .append(Component.literal(".").withStyle(ChatFormatting.GRAY)));
         return true;
     }
 
@@ -369,6 +389,10 @@ final class VipService {
         current.addHistory(target.getUUID(), target.getName().getString(), "VIP_REMOVIDO",
                 "plano: " + removed.plan() + " | staff: " + staff.getName().getString());
         current.save();
+        target.sendSystemMessage(Component.literal("✦ O TEMPO DA CONCESSÃO TERMINOU ✦")
+                .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD)
+                .append(Component.literal("\nAs relíquias ligadas ao antigo título foram recolhidas.")
+                        .withStyle(ChatFormatting.GRAY)));
         return true;
     }
 
@@ -445,11 +469,17 @@ final class VipService {
             createPendingChoices(current, target.getUUID(), target.getName().getString(), kit.plan, kit.name);
         }
         target.sendSystemMessage(Component.literal(pending.renewalKit()
-                        ? "✦ SEU KIT RENOVADO FOI ENTREGUE ✦" : "✦ SEU VIP PENDENTE FOI ENTREGUE ✦")
-                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+                        ? "✦ AS RELÍQUIAS DE SEU TÍTULO RETORNARAM ✦"
+                        : "✦ UM TÍTULO FOI RESERVADO EM SEU NOME ✦")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
+                .append(Component.literal(pending.renewalKit()
+                        ? "\nA renovação foi cumprida durante sua ausência."
+                        : "\nEnquanto esteve ausente, a concessão aguardou seu retorno.")
+                        .withStyle(ChatFormatting.YELLOW)));
         if (!pending.renewalKit() && current.data.pendingChoices.containsKey(target.getUUID().toString()))
-            target.sendSystemMessage(Component.literal("Use /vip escolher para selecionar seus benefícios.")
-                    .withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD));
+            target.sendSystemMessage(Component.literal("O direito de escolha também lhe foi concedido: ")
+                    .withStyle(ChatFormatting.YELLOW)
+                    .append(Component.literal("/vip escolher").withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD)));
     }
 
     private void updateExpiry(ServerPlayer player, long expiry) {
@@ -625,20 +655,48 @@ final class VipService {
 
     private void sendExpiryWarnings(VipStore current, ServerPlayer player, long now) {
         VipStore.Profile profile = current.data.profiles.get(player.getUUID().toString());
-        if (profile == null || profile.expiresAt() <= now) return;
-        long remainingDays = Math.max(1, (profile.expiresAt() - now + 86_399_999L) / 86_400_000L);
+        if (profile == null) return;
         List<Integer> sent = current.data.sentWarnings.computeIfAbsent(player.getUUID().toString(),
                 ignored -> new java.util.ArrayList<>());
-        for (int warning : VipConfig.load(player.getServer()).warningDays) {
-            if (remainingDays <= warning && !sent.contains(warning)) {
-                sent.add(warning);
-                player.sendSystemMessage(Component.literal("⚠ SEU VIP EXPIRA EM " + remainingDays + " DIA(S)")
-                        .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)
-                        .append(Component.literal("\nPlano: " + profile.plan() + " | use /vip kits para consultar os planos.")
+        if (profile.expiresAt() <= now) {
+            if (!sent.contains(0)) {
+                sent.add(0);
+                player.sendSystemMessage(Component.literal("✦ O TEMPO DA CONCESSÃO TERMINOU ✦")
+                        .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD)
+                        .append(Component.literal("\nSeu título foi recolhido. As relíquias vinculadas a ele "
+                                + "permanecerão sob custódia por sete dias.")
                                 .withStyle(ChatFormatting.GRAY)));
                 current.save();
             }
+            return;
         }
+        long remainingDays = Math.max(1, (profile.expiresAt() - now + 86_399_999L) / 86_400_000L);
+        for (int warning : VipConfig.load(player.getServer()).warningDays) {
+            if (remainingDays <= warning && !sent.contains(warning)) {
+                sent.add(warning);
+                player.sendSystemMessage(Component.literal(remainingDays == 1
+                                ? "✦ O ÚLTIMO CICLO DE SUA CONCESSÃO SE APROXIMA ✦"
+                                : "✦ A FORÇA QUE SUSTENTA SEU TÍTULO ENFRAQUECE ✦")
+                        .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)
+                        .append(Component.literal("\nRestam ").withStyle(ChatFormatting.GRAY))
+                        .append(Component.literal(remainingDays + " dia(s)")
+                                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD))
+                        .append(Component.literal(" para o término do título ").withStyle(ChatFormatting.GRAY))
+                        .append(Component.literal(profile.plan()).withStyle(ChatFormatting.GOLD))
+                        .append(Component.literal(".").withStyle(ChatFormatting.GRAY)));
+                current.save();
+            }
+        }
+    }
+
+    private String planFlavor(String plan) {
+        return switch (plan.toLowerCase()) {
+            case "viajante" -> "Os caminhos agora reconhecem seus passos.";
+            case "nobre" -> "Seu nome foi inscrito entre os dignos.";
+            case "regente" -> "A autoridade dos Regentes lhe foi confiada.";
+            case "soberano" -> "Diante de seu título, antigas portas se abrem.";
+            default -> "Seu nome foi reconhecido entre os dignos.";
+        };
     }
 
     private void scanDroppedItems(MinecraftServer server, VipStore current, long now) {

@@ -88,6 +88,8 @@ Os dados ficam em `noveris_vip_system.json`, dentro da pasta do mundo, e sobrevi
 Identificadores de itens já arquivados também são preservados. Se uma restauração de backup fizer uma cópia
 antiga reaparecer, ela é bloqueada e a ocorrência entra no histórico como proteção contra duplicação.
 
+As mensagens destinadas aos jogadores usam uma linguagem de títulos, concessões e relíquias adequada ao roleplay. Diagnósticos, erros técnicos e confirmações administrativas permanecem objetivos para a staff.
+
 ## Plataforma e build
 
 - Minecraft 1.21.1

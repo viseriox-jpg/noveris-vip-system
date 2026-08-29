@@ -98,8 +98,8 @@ final class ChoiceSelectionMenu extends ChestMenu {
             if (optionIndex >= options.size()) return;
             if (!selected.remove(optionIndex)) {
                 if (selected.size() >= required()) {
-                    serverPlayer.sendSystemMessage(Component.literal("Você já selecionou o limite desta categoria.")
-                            .withStyle(ChatFormatting.RED));
+                    serverPlayer.sendSystemMessage(Component.literal("Sua concessão permite apenas " + required()
+                            + " escolha(s) nesta categoria.").withStyle(ChatFormatting.YELLOW));
                     return;
                 }
                 selected.add(optionIndex);
@@ -111,14 +111,16 @@ final class ChoiceSelectionMenu extends ChestMenu {
         if (slotId == NEXT_SLOT && page + 1 < pageCount()) { page++; rebuild(); return; }
         if (slotId == CONFIRM_SLOT) {
             if (selected.size() != required()) {
-                serverPlayer.sendSystemMessage(Component.literal("Selecione exatamente " + required() + " opção(ões).")
-                        .withStyle(ChatFormatting.YELLOW));
+                serverPlayer.sendSystemMessage(Component.literal("A decisão ainda não pode ser selada.")
+                        .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)
+                        .append(Component.literal(" Selecione exatamente " + required() + " opção(ões).")
+                                .withStyle(ChatFormatting.GRAY)));
                 return;
             }
             List<Integer> chosen = List.copyOf(selected);
             if (!service.completeChoice(serverPlayer, categoryName, chosen)) {
-                serverPlayer.sendSystemMessage(Component.literal("Esta escolha não está mais disponível.")
-                        .withStyle(ChatFormatting.RED));
+                serverPlayer.sendSystemMessage(Component.literal("Esta decisão já não repousa sobre seu nome.")
+                        .withStyle(ChatFormatting.DARK_RED));
                 serverPlayer.closeContainer();
                 return;
             }
