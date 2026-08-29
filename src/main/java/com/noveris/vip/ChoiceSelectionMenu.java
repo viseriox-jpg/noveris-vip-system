@@ -21,7 +21,8 @@ import java.util.List;
 import java.util.Set;
 
 final class ChoiceSelectionMenu extends ChestMenu {
-    private static final int CONFIRM_SLOT = 49, CANCEL_SLOT = 53, MAX_OPTIONS = 45;
+    private static final int PREVIOUS_SLOT = 45, PAGE_SLOT = 46, SELECTED_SLOT = 47;
+    private static final int CONFIRM_SLOT = 49, NEXT_SLOT = 52, CANCEL_SLOT = 53, OPTIONS_PER_PAGE = 45;
     private final SimpleContainer display;
     private final VipService service;
     private final String categoryName;
@@ -29,6 +30,7 @@ final class ChoiceSelectionMenu extends ChestMenu {
     private final List<VipStore.ChoiceItem> options;
     private final HolderLookup.Provider registries;
     private final Set<Integer> selected = new LinkedHashSet<>();
+    private int page;
 
     ChoiceSelectionMenu(int id, Inventory inventory, SimpleContainer display, VipService service,
                         String categoryName, VipStore.ChoiceCategory category) {
@@ -37,25 +39,27 @@ final class ChoiceSelectionMenu extends ChestMenu {
         this.service = service;
         this.categoryName = categoryName;
         this.category = category;
-        this.options = category.items.stream().limit(MAX_OPTIONS).toList();
+        this.options = List.copyOf(category.items);
         this.registries = inventory.player.registryAccess();
         rebuild();
     }
 
     private void rebuild() {
-        for (int slot = 0; slot < MAX_OPTIONS; slot++) display.setItem(slot, ItemStack.EMPTY);
-        for (int i = 0; i < options.size(); i++) {
-            VipStore.ChoiceItem option = options.get(i);
+        for (int slot = 0; slot < OPTIONS_PER_PAGE; slot++) display.setItem(slot, ItemStack.EMPTY);
+        int offset = page * OPTIONS_PER_PAGE;
+        for (int slot = 0; slot < OPTIONS_PER_PAGE && offset + slot < options.size(); slot++) {
+            int optionIndex = offset + slot;
+            VipStore.ChoiceItem option = options.get(optionIndex);
             ItemStack stack = VipStore.decode(option.encodedStack(), registries).copy();
             List<Component> lore = new ArrayList<>(stack.getOrDefault(DataComponents.LORE, ItemLore.EMPTY).lines());
             lore.add(Component.empty());
             lore.add(Component.literal(option.temporary() ? "⌛ Temporário" : "◆ Permanente")
                     .withStyle(option.temporary() ? ChatFormatting.GOLD : ChatFormatting.AQUA, ChatFormatting.BOLD));
-            lore.add(Component.literal(selected.contains(i) ? "✔ SELECIONADO" : "Clique para selecionar")
-                    .withStyle(selected.contains(i) ? ChatFormatting.GREEN : ChatFormatting.GRAY));
+            lore.add(Component.literal(selected.contains(optionIndex) ? "✔ SELECIONADO" : "Clique para selecionar")
+                    .withStyle(selected.contains(optionIndex) ? ChatFormatting.GREEN : ChatFormatting.GRAY));
             stack.set(DataComponents.LORE, new ItemLore(lore));
-            if (selected.contains(i)) stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
-            display.setItem(i, stack);
+            if (selected.contains(optionIndex)) stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
+            display.setItem(slot, stack);
         }
         for (int slot = 45; slot < 54; slot++) {
             ItemStack pane = new ItemStack(Items.BLACK_STAINED_GLASS_PANE);
@@ -63,10 +67,14 @@ final class ChoiceSelectionMenu extends ChestMenu {
                     .withStyle(ChatFormatting.GRAY));
             display.setItem(slot, pane);
         }
+        control(PREVIOUS_SLOT, Items.ARROW, "← ANTERIOR", ChatFormatting.AQUA);
+        control(PAGE_SLOT, Items.PAPER, "PÁGINA " + (page + 1) + "/" + pageCount(), ChatFormatting.YELLOW);
+        control(SELECTED_SLOT, Items.LIME_DYE, "SELECIONADOS: " + selected.size() + "/" + required(), ChatFormatting.GREEN);
         ItemStack confirm = new ItemStack(Items.EMERALD_BLOCK);
         confirm.set(DataComponents.CUSTOM_NAME, Component.literal("CONFIRMAR • " + selected.size() + "/" + required())
                 .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
         display.setItem(CONFIRM_SLOT, confirm);
+        control(NEXT_SLOT, Items.ARROW, "PRÓXIMA →", ChatFormatting.AQUA);
         ItemStack cancel = new ItemStack(Items.BARRIER);
         cancel.set(DataComponents.CUSTOM_NAME, Component.literal("FECHAR E ESCOLHER DEPOIS")
                 .withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
@@ -74,22 +82,33 @@ final class ChoiceSelectionMenu extends ChestMenu {
         broadcastChanges();
     }
 
+    private void control(int slot, net.minecraft.world.item.Item item, String name, ChatFormatting color) {
+        ItemStack stack = new ItemStack(item);
+        stack.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(color, ChatFormatting.BOLD));
+        display.setItem(slot, stack);
+    }
+
     private int required() { return Math.min(category.limit, options.size()); }
+    private int pageCount() { return Math.max(1, (options.size() + OPTIONS_PER_PAGE - 1) / OPTIONS_PER_PAGE); }
 
     @Override public void clicked(int slotId, int button, ClickType clickType, Player player) {
         if (!(player instanceof ServerPlayer serverPlayer)) return;
-        if (slotId >= 0 && slotId < options.size()) {
-            if (!selected.remove(slotId)) {
+        if (slotId >= 0 && slotId < OPTIONS_PER_PAGE) {
+            int optionIndex = page * OPTIONS_PER_PAGE + slotId;
+            if (optionIndex >= options.size()) return;
+            if (!selected.remove(optionIndex)) {
                 if (selected.size() >= required()) {
                     serverPlayer.sendSystemMessage(Component.literal("Você já selecionou o limite desta categoria.")
                             .withStyle(ChatFormatting.RED));
                     return;
                 }
-                selected.add(slotId);
+                selected.add(optionIndex);
             }
             rebuild();
             return;
         }
+        if (slotId == PREVIOUS_SLOT && page > 0) { page--; rebuild(); return; }
+        if (slotId == NEXT_SLOT && page + 1 < pageCount()) { page++; rebuild(); return; }
         if (slotId == CONFIRM_SLOT) {
             if (selected.size() != required()) {
                 serverPlayer.sendSystemMessage(Component.literal("Selecione exatamente " + required() + " opção(ões).")
@@ -113,4 +132,9 @@ final class ChoiceSelectionMenu extends ChestMenu {
     }
 
     @Override public ItemStack quickMoveStack(Player player, int index) { return ItemStack.EMPTY; }
+
+    @Override public void removed(Player player) {
+        display.clearContent();
+        super.removed(player);
+    }
 }

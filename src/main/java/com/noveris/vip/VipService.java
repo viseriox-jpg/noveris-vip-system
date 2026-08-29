@@ -86,43 +86,25 @@ final class VipService {
         VipStore current = store(staff.getServer());
         SimpleContainer editor = new SimpleContainer(54);
         VipStore.ChoiceCategory existing = current.data.choiceCategories.get(name.toLowerCase());
-        if (existing != null) {
-            int temporary = ChoiceCategoryEditorMenu.TEMPORARY_FROM;
-            int permanent = ChoiceCategoryEditorMenu.PERMANENT_FROM;
-            for (VipStore.ChoiceItem item : existing.items) {
-                int slot = item.temporary() ? temporary++ : permanent++;
-                int end = item.temporary() ? ChoiceCategoryEditorMenu.TEMPORARY_TO
-                        : ChoiceCategoryEditorMenu.PERMANENT_TO;
-                if (slot <= end) editor.setItem(slot, VipStore.decode(item.encodedStack(), staff.registryAccess()).copy());
-            }
-        }
         staff.openMenu(new SimpleMenuProvider((id, inventory, player) ->
-                new ChoiceCategoryEditorMenu(id, inventory, editor, this, name.toLowerCase(), limit),
+                new ChoiceCategoryEditorMenu(id, inventory, editor, this, name.toLowerCase(), limit, existing),
                 Component.literal("Catálogo VIP — " + name + " • escolha " + limit)));
     }
 
-    void saveChoiceCategory(ServerPlayer staff, String name, int limit, SimpleContainer editor) {
+    void saveChoiceCategory(ServerPlayer staff, String name, int limit,
+                            List<ItemStack> temporary, List<ItemStack> permanent) {
         VipStore current = store(staff.getServer());
         VipStore.ChoiceCategory category = new VipStore.ChoiceCategory(name, limit);
-        saveChoiceRange(staff, editor, category, ChoiceCategoryEditorMenu.TEMPORARY_FROM,
-                ChoiceCategoryEditorMenu.TEMPORARY_TO, true);
-        saveChoiceRange(staff, editor, category, ChoiceCategoryEditorMenu.PERMANENT_FROM,
-                ChoiceCategoryEditorMenu.PERMANENT_TO, false);
+        temporary.stream().filter(stack -> !stack.isEmpty()).forEach(stack -> category.items.add(
+                new VipStore.ChoiceItem(VipStore.encode(stack.copy(), staff.registryAccess()), true)));
+        permanent.stream().filter(stack -> !stack.isEmpty()).forEach(stack -> category.items.add(
+                new VipStore.ChoiceItem(VipStore.encode(stack.copy(), staff.registryAccess()), false)));
         current.data.choiceCategories.put(name.toLowerCase(), category);
         current.addHistory(staff.getUUID(), staff.getName().getString(), "CATALOGO_SALVO",
                 name + " | limite: " + limit + " | opções: " + category.items.size());
         current.save();
         staff.sendSystemMessage(Component.literal("Catálogo " + name + " salvo com " + category.items.size()
                 + " opções e limite de " + limit + ".").withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
-    }
-
-    private void saveChoiceRange(ServerPlayer staff, SimpleContainer editor, VipStore.ChoiceCategory category,
-                                 int from, int to, boolean temporary) {
-        for (int slot = from; slot <= to; slot++) {
-            ItemStack stack = editor.getItem(slot);
-            if (!stack.isEmpty()) category.items.add(new VipStore.ChoiceItem(
-                    VipStore.encode(stack.copy(), staff.registryAccess()), temporary));
-        }
     }
 
     boolean linkChoiceCategory(MinecraftServer server, String plan, String category) {
@@ -216,7 +198,7 @@ final class VipService {
         if (pending == null || profile == null || category == null || profile.expiresAt() <= System.currentTimeMillis()
                 || pending.remainingCategories.isEmpty() || !pending.remainingCategories.getFirst().equals(categoryName)) return false;
         List<Integer> unique = indexes.stream().distinct().toList();
-        int required = Math.min(category.limit, Math.min(45, category.items.size()));
+        int required = Math.min(category.limit, category.items.size());
         if (unique.size() != required || unique.stream().anyMatch(index -> index < 0 || index >= category.items.size())) return false;
         List<String> names = new java.util.ArrayList<>();
         for (int index : unique) {
