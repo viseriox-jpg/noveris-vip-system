@@ -51,7 +51,7 @@ final class LoreVaultMenu extends ChestMenu {
         broadcastChanges();
     }
     private void control(int slot, net.minecraft.world.item.Item item, String name, ChatFormatting color) {
-        ItemStack stack = new ItemStack(item);
+        ItemStack stack = GuiIcons.fromLegacy(item, name);
         stack.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(color, ChatFormatting.BOLD));
         display.setItem(slot, stack);
     }

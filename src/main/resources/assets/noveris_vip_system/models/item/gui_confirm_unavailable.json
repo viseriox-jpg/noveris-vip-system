@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "noveris_vip_system:item/gui_icons/gui_confirm_unavailable"
+  }
+}

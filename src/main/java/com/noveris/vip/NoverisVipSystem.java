@@ -1,6 +1,7 @@
 package com.noveris.vip;
 
 import com.mojang.logging.LogUtils;
+import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
 import org.slf4j.Logger;
@@ -9,7 +10,8 @@ import org.slf4j.Logger;
 public final class NoverisVipSystem {
     public static final String MOD_ID = "noveris_vip_system";
     static final Logger LOGGER = LogUtils.getLogger();
-    public NoverisVipSystem() {
+    public NoverisVipSystem(IEventBus modEventBus) {
+        GuiIcons.register(modEventBus);
         NeoForge.EVENT_BUS.register(new VipEvents());
         NeoForge.EVENT_BUS.register(new LoreEvents());
     }
