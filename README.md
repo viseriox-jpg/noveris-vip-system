@@ -69,6 +69,8 @@ Em `/vip kit ver <nome>`, quatro botões fixos abrem temporários, permanentes, 
 - `/vip cofre <player> excluir <slot>`
 - `/vip cofre <player> excluir tudo` — pede confirmação e exclui todo o cofre
 
+O cofre VIP possui 45 itens por página, navegação por setas e mostra em cada item o slot global usado pelos comandos, o kit de origem e as datas de arquivamento e exclusão.
+
 Os comandos administrativos exigem permission level 2. `/vip kits` e `/vip kit ver` ficam disponíveis para todos.
 
 ## Itens temporários

@@ -924,10 +924,7 @@ final class VipService {
         List<VipStore.VaultEntry> entries = current.data.vault.getOrDefault(
                 target.getUUID().toString(), List.of());
         SimpleContainer inventory = new SimpleContainer(54);
-        for (int i = 0; i < Math.min(54, entries.size()); i++) {
-            inventory.setItem(i, VipStore.decode(entries.get(i).encodedStack(), staff.registryAccess()));
-        }
-        staff.openMenu(new SimpleMenuProvider((id, inv, player) -> new VaultViewMenu(id, inv, inventory),
+        staff.openMenu(new SimpleMenuProvider((id, inv, player) -> new VaultViewMenu(id, inv, inventory, entries),
                 Component.literal("Cofre VIP de " + target.getName().getString() + " | " + entries.size() + " itens")));
     }
 
