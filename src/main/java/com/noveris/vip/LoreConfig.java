@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -58,12 +59,25 @@ final class LoreConfig {
             Files.createDirectories(file.getParent());
             if (Files.notExists(file)) Files.write(file, DEFAULTS);
             Map<String, String> values = new HashMap<>();
-            for (String raw : Files.readAllLines(file)) {
+            List<String> lines = new ArrayList<>(Files.readAllLines(file));
+            for (String raw : lines) {
                 String line = raw.split("#", 2)[0].trim();
                 int equals = line.indexOf('=');
                 if (equals > 0) values.put(line.substring(0, equals).trim(),
                         line.substring(equals + 1).trim().replace("\"", ""));
             }
+            boolean migrated = false;
+            for (String fallback : DEFAULTS) {
+                int equals = fallback.indexOf('=');
+                if (equals < 0) continue;
+                String key = fallback.substring(0, equals).trim();
+                if (!values.containsKey(key)) {
+                    lines.add(fallback);
+                    values.put(key, fallback.substring(equals + 1).trim().replace("\"", ""));
+                    migrated = true;
+                }
+            }
+            if (migrated) Files.write(file, lines);
             return new LoreConfig(values);
         } catch (IOException exception) {
             NoverisVipSystem.LOGGER.error("Falha ao carregar configuração de lore", exception);
