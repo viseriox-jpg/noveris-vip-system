@@ -293,16 +293,31 @@ final class LoreService {
             if (blockEntity.isRemoved() || blockEntity.getLevel() == null) {
                 loadedBlockEntities.remove(blockEntity); continue;
             }
-            IItemHandler handler = null;
+            Set<IItemHandler> handlers = Collections.newSetFromMap(new IdentityHashMap<>());
+            IItemHandler internal = reflectiveHandler(blockEntity);
+            if (internal != null) handlers.add(internal);
             for (Direction side : Direction.values()) {
-                handler = blockEntity.getLevel().getCapability(Capabilities.ItemHandler.BLOCK,
+                IItemHandler handler = blockEntity.getLevel().getCapability(Capabilities.ItemHandler.BLOCK,
                         blockEntity.getBlockPos(), blockEntity.getBlockState(), blockEntity, side);
-                if (handler != null) break;
+                if (handler != null) handlers.add(handler);
             }
-            if (handler == null) handler = blockEntity.getLevel().getCapability(Capabilities.ItemHandler.BLOCK,
+            IItemHandler unsided = blockEntity.getLevel().getCapability(Capabilities.ItemHandler.BLOCK,
                     blockEntity.getBlockPos(), blockEntity.getBlockState(), blockEntity, null);
-            if (handler != null) scanHandler(server, handler, blockEntityLabel(blockEntity));
+            if (unsided != null) handlers.add(unsided);
+            for (IItemHandler handler : handlers) scanHandler(server, handler, blockEntityLabel(blockEntity));
             if (loadedBlockEntities.contains(blockEntity)) blockEntities.addLast(blockEntity);
+        }
+    }
+
+    private IItemHandler reflectiveHandler(BlockEntity blockEntity) {
+        String type = blockEntity.getClass().getName();
+        if (!type.startsWith("net.p3pp3rf1y.sophisticated")) return null;
+        try {
+            Object wrapper = blockEntity.getClass().getMethod("getStorageWrapper").invoke(blockEntity);
+            Object handler = wrapper.getClass().getMethod("getInventoryHandler").invoke(wrapper);
+            return handler instanceof IItemHandler itemHandler ? itemHandler : null;
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            return null;
         }
     }
 

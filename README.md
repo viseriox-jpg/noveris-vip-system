@@ -118,6 +118,8 @@ O cofre possui páginas de 45 itens. Histórico, diagnóstico, cofre e revogaç�
 
 `/nlore desempenho` mostra duração das varreduras, picos, fila e quantidade de recipientes carregados. Chunks descarregados saem do rastreamento automaticamente. O limite de alerta fica em `performance_warn_ms`.
 
+Relíquias também são recolhidas de baús, barris, shulkers, funis, molduras e inventários internos que exponham `IItemHandler`. Há integração opcional com Sophisticated Backpacks, Sophisticated Storage e Tom's Simple Storage; nenhum desses mods é dependência obrigatória. Recipientes permanecem numa fila circular e são examinados aos poucos, inclusive quando o item é colocado depois do carregamento do chunk. As opções `containers_per_tick`, `mod_handlers_per_tick`, `entity_scan_seconds` e `nested_inventory_depth` controlam o custo da varredura.
+
 Antes de substituir `noveris_vip_system.json` e `noveris_lore.json`, o mod mantém uma cópia `.bak` atualizada no máximo uma vez por minuto. A gravação usa arquivo temporário e substituição atômica quando suportada, reduzindo o risco de corrupção em desligamentos inesperados.
 
 ## Plataforma e build
