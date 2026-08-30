@@ -965,6 +965,21 @@ final class VipService {
         return true;
     }
 
+    int vaultSize(MinecraftServer server, UUID targetId) {
+        return store(server).data.vault.getOrDefault(targetId.toString(), List.of()).size();
+    }
+
+    int deleteAllVaultEntries(ServerPlayer staff, ServerPlayer target) {
+        VipStore current = store(staff.getServer());
+        List<VipStore.VaultEntry> entries = current.data.vault.remove(target.getUUID().toString());
+        int removed = entries == null ? 0 : entries.size();
+        if (removed == 0) return 0;
+        current.addHistory(target.getUUID(), target.getName().getString(), "COFRE_EXCLUIDO_TUDO",
+                removed + " item(ns) | staff: " + staff.getName().getString());
+        current.save();
+        return removed;
+    }
+
     enum VaultResult { SUCCESS, INVALID_SLOT, EXPIRED_ARCHIVE, INVALID_ITEM }
 
     boolean openKitPreview(ServerPlayer player, String kitName) {

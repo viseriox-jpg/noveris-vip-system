@@ -67,6 +67,7 @@ Em `/vip kit ver <nome>`, quatro botões fixos abrem temporários, permanentes, 
 - `/vip cofre <player> restaurar <slot> <dias>`
 - `/vip cofre <player> manter <slot>`
 - `/vip cofre <player> excluir <slot>`
+- `/vip cofre <player> excluir tudo` — pede confirmação e exclui todo o cofre
 
 Os comandos administrativos exigem permission level 2. `/vip kits` e `/vip kit ver` ficam disponíveis para todos.
 
@@ -107,6 +108,7 @@ Segure o item na mão principal e use:
 - `/nlore cofre <player> restaurar <slot> <duração>` — restaura com novo prazo;
 - `/nlore cofre <player> manter <slot>` — restaura como item permanente;
 - `/nlore cofre <player> excluir <slot>` — exclui definitivamente.
+- `/nlore cofre <player> excluir tudo` — pede confirmação e exclui todo o cofre.
 
 Durações aceitam `s`, `m`, `h` e `d`, por exemplo `30m`, `12h` e `7d`. O modo padrão é **vinculado**. Relíquias transferíveis mantêm o mesmo vencimento ao mudar de portador; vinculadas são recolhidas ao cair em mãos diferentes. O tempo continua correndo enquanto o jogador está offline.
 

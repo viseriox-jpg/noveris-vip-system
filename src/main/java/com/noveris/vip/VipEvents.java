@@ -176,15 +176,19 @@ final class VipEvents {
                         .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).vault))
                         .then(Commands.argument("player", EntityArgument.player()).executes(this::vault)
                                 .then(Commands.literal("restaurar")
-                                        .then(Commands.argument("slot", IntegerArgumentType.integer(1, 54))
+                                        .then(Commands.argument("slot", IntegerArgumentType.integer(1))
                                                 .then(Commands.argument("dias", IntegerArgumentType.integer(1, 3650))
                                                         .executes(ctx -> restoreVault(ctx, false)))))
                                 .then(Commands.literal("manter")
-                                        .then(Commands.argument("slot", IntegerArgumentType.integer(1, 54))
+                                        .then(Commands.argument("slot", IntegerArgumentType.integer(1))
                                                 .executes(ctx -> restoreVault(ctx, true))))
                                 .then(Commands.literal("excluir")
-                                        .then(Commands.argument("slot", IntegerArgumentType.integer(1, 54))
-                                                .executes(this::deleteVault)))));
+                                        .then(Commands.argument("slot", IntegerArgumentType.integer(1))
+                                                .executes(this::deleteVault))
+                                        .then(Commands.literal("tudo")
+                                                .executes(this::requestDeleteAllVault)
+                                                .then(Commands.literal("confirmar")
+                                                        .executes(this::deleteAllVault))))));
     }
 
     private int help(CommandContext<CommandSourceStack> ctx) {
@@ -831,6 +835,26 @@ final class VipEvents {
         ctx.getSource().sendSuccess(() -> Component.literal("Item do cofre excluído definitivamente.")
                 .withStyle(ChatFormatting.RED), true);
         return 1;
+    }
+
+    private int requestDeleteAllVault(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        int amount = service.vaultSize(ctx.getSource().getServer(), target.getUUID());
+        if (amount == 0) { ctx.getSource().sendFailure(Component.literal("O cofre está vazio.")); return 0; }
+        sendConfirmation(ctx.getSource(), "Excluir definitivamente os " + amount
+                        + " item(ns) do cofre de " + target.getName().getString() + "?",
+                "/vip cofre " + target.getName().getString() + " excluir tudo confirmar");
+        return 1;
+    }
+
+    private int deleteAllVault(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer staff = ctx.getSource().getPlayerOrException();
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        int removed = service.deleteAllVaultEntries(staff, target);
+        if (removed == 0) { ctx.getSource().sendFailure(Component.literal("O cofre já está vazio.")); return 0; }
+        ctx.getSource().sendSuccess(() -> Component.literal("Cofre apagado: " + removed
+                + " item(ns) excluídos definitivamente.").withStyle(ChatFormatting.RED, ChatFormatting.BOLD), true);
+        return removed;
     }
 
     private java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestKits(

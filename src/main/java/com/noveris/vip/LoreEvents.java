@@ -99,7 +99,11 @@ final class LoreEvents {
                                 .then(Commands.literal("excluir")
                                         .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).maintenancePermission))
                                         .then(Commands.argument("slot", IntegerArgumentType.integer(1))
-                                                .executes(this::deleteVault))))));
+                                                .executes(this::deleteVault))
+                                        .then(Commands.literal("tudo")
+                                                .executes(this::requestDeleteAllVault)
+                                                .then(Commands.literal("confirmar")
+                                                        .executes(this::deleteAllVault)))))));
     }
 
     private int help(CommandContext<CommandSourceStack> ctx) {
@@ -322,6 +326,38 @@ final class LoreEvents {
         if (!service.deleteVault(ctx.getSource().getPlayerOrException(), target.id(),
                 IntegerArgumentType.getInteger(ctx, "slot"))) { ctx.getSource().sendFailure(Component.literal("Slot inexistente.")); return 0; }
         ctx.getSource().sendSuccess(() -> Component.literal("Registro do cofre excluído.").withStyle(ChatFormatting.RED), true); return 1;
+    }
+
+    private int requestDeleteAllVault(CommandContext<CommandSourceStack> ctx)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        LoreTarget target = resolveTarget(ctx);
+        if (target == null) return 0;
+        int amount = service.vaultSize(ctx.getSource().getServer(), target.id());
+        if (amount == 0) { ctx.getSource().sendFailure(Component.literal("O cofre está vazio.")); return 0; }
+        String command = "/nlore cofre " + target.name() + " excluir tudo confirmar";
+        Component confirm = Component.literal("[CONFIRMAR]").withStyle(style -> style
+                .withColor(ChatFormatting.RED).withBold(true)
+                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command))
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                        Component.literal("Excluir " + amount + " relíquia(s) definitivamente"))));
+        Component cancel = Component.literal("[CANCELAR]").withStyle(style -> style
+                .withColor(ChatFormatting.GRAY).withBold(true)
+                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/nlore cancelar")));
+        ctx.getSource().sendSuccess(() -> Component.literal("⚠ Excluir todo o cofre de " + target.name()
+                        + " (" + amount + " relíquia(s))?\n").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)
+                .append(confirm).append(Component.literal("  ")).append(cancel), false);
+        return 1;
+    }
+
+    private int deleteAllVault(CommandContext<CommandSourceStack> ctx)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        LoreTarget target = resolveTarget(ctx);
+        if (target == null) return 0;
+        int removed = service.deleteAllVault(ctx.getSource().getPlayerOrException(), target.id(), target.name());
+        if (removed == 0) { ctx.getSource().sendFailure(Component.literal("O cofre já está vazio.")); return 0; }
+        ctx.getSource().sendSuccess(() -> Component.literal("Cofre de relíquias apagado: " + removed
+                + " item(ns) excluídos definitivamente.").withStyle(ChatFormatting.RED, ChatFormatting.BOLD), true);
+        return removed;
     }
 
     private java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestDurations(

@@ -564,6 +564,21 @@ final class LoreService {
         entries.remove(slot - 1); current.save(); return true;
     }
 
+    int vaultSize(MinecraftServer server, UUID targetId) {
+        return store(server).data.vault.getOrDefault(targetId.toString(), List.of()).size();
+    }
+
+    int deleteAllVault(ServerPlayer staff, UUID targetId, String targetName) {
+        LoreStore current = store(staff.getServer());
+        List<LoreStore.VaultEntry> entries = current.data.vault.remove(targetId.toString());
+        int removed = entries == null ? 0 : entries.size();
+        if (removed == 0) return 0;
+        current.history(targetId, targetName, "COFRE_RELIQUIAS_EXCLUIDO_TUDO",
+                removed + " item(ns) | staff: " + staff.getName().getString());
+        current.save();
+        return removed;
+    }
+
     private List<ItemStack> allStacks(ServerPlayer player) {
         List<ItemStack> stacks = new ArrayList<>();
         player.getInventory().items.forEach(stacks::add);
