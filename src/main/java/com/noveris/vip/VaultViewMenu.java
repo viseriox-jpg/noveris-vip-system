@@ -70,7 +70,7 @@ final class VaultViewMenu extends ChestMenu {
     }
 
     private void control(int slot, net.minecraft.world.item.Item item, String name, ChatFormatting color) {
-        ItemStack stack = GuiIcons.fromLegacy(item, name);
+        ItemStack stack = new ItemStack(item);
         stack.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(color, ChatFormatting.BOLD));
         display.setItem(slot, stack);
     }

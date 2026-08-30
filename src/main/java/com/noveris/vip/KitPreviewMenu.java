@@ -92,8 +92,7 @@ final class KitPreviewMenu extends ChestMenu {
                 VipStore.ChoiceCategory category = store.data.choiceCategories.get(name);
                 if (category == null) continue;
                 long temporaryOptions = category.items.stream().filter(VipStore.ChoiceItem::temporary).count();
-                ItemStack icon = category.items.isEmpty()
-                        ? GuiIcons.stack(GuiIcons.Role.CHOICES, GuiIcons.State.AVAILABLE)
+                ItemStack icon = category.items.isEmpty() ? new ItemStack(Items.CHEST)
                         : VipStore.decode(category.items.getFirst().encodedStack(), inventory.player.registryAccess()).copy();
                 icon.setCount(1);
                 icon.set(DataComponents.CUSTOM_NAME, Component.literal(name.toUpperCase())
@@ -127,7 +126,7 @@ final class KitPreviewMenu extends ChestMenu {
         VipStore.PlanDefinition plan = store.data.plans.get(kit.plan);
         int choices = categories.stream().map(store.data.choiceCategories::get).filter(java.util.Objects::nonNull)
                 .mapToInt(category -> category.limit).sum();
-        ItemStack info = GuiIcons.stack(GuiIcons.Role.INFORMATION, GuiIcons.State.SELECTED);
+        ItemStack info = new ItemStack(Items.NETHER_STAR);
         info.set(DataComponents.CUSTOM_NAME, Component.literal(plan == null ? kit.plan : plan.displayName())
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
         info.set(DataComponents.LORE, new ItemLore(List.of(
@@ -141,8 +140,8 @@ final class KitPreviewMenu extends ChestMenu {
 
     private void tab(int slot, net.minecraft.world.item.Item item, String name, ChatFormatting color,
                      int tabMode, String description) {
+        ItemStack stack = new ItemStack(item);
         boolean active = mode == tabMode;
-        ItemStack stack = GuiIcons.fromLegacy(item, active ? "✔ " + name : name);
         stack.set(DataComponents.CUSTOM_NAME, Component.literal((active ? "✔ " : "") + name)
                 .withStyle(active ? ChatFormatting.GREEN : color, ChatFormatting.BOLD));
         stack.set(DataComponents.LORE, new ItemLore(List.of(
@@ -158,7 +157,7 @@ final class KitPreviewMenu extends ChestMenu {
                 enabled ? name : "SEM OUTRA PÁGINA", enabled ? ChatFormatting.AQUA : ChatFormatting.DARK_GRAY);
     }
     private void control(int slot, net.minecraft.world.item.Item item, String name, ChatFormatting color) {
-        ItemStack stack = GuiIcons.fromLegacy(item, name);
+        ItemStack stack = new ItemStack(item);
         stack.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(color, ChatFormatting.BOLD));
         display.setItem(slot, stack);
     }

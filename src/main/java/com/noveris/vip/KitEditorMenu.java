@@ -72,7 +72,7 @@ final class KitEditorMenu extends ChestMenu {
 
     private void installControls() {
         for (int slot = 45; slot < 54; slot++) {
-            ItemStack pane = GuiIcons.stack(GuiIcons.Role.BLOCKED, GuiIcons.State.UNAVAILABLE);
+            ItemStack pane = new ItemStack(Items.BLACK_STAINED_GLASS_PANE);
             pane.set(DataComponents.CUSTOM_NAME, Component.literal("Editor de kit VIP").withStyle(ChatFormatting.GRAY));
             display.setItem(slot, pane);
         }
@@ -87,7 +87,7 @@ final class KitEditorMenu extends ChestMenu {
     }
 
     private void control(int slot, net.minecraft.world.item.Item item, String name, ChatFormatting color) {
-        ItemStack stack = GuiIcons.fromLegacy(item, name);
+        ItemStack stack = new ItemStack(item);
         stack.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(color, ChatFormatting.BOLD));
         display.setItem(slot, stack);
     }
