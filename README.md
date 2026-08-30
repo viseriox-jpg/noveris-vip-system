@@ -98,8 +98,11 @@ Segure o item na mão principal e use:
 - `/nlore temporario <player> <duração> [vinculado|transferivel] [motivo]` — entrega uma cópia temporária;
 - `/nlore temporario mao <duração> [modo] [motivo]` — transforma o item segurado;
 - `/nlore revogar <player> <início-do-selo>` — revoga antecipadamente uma relíquia;
-- `/nlore historico <player>` — mostra concessões, transferências, drops e recolhimentos;
+- `/nlore revogar <player>` — abre a GUI paginada de revogação;
+- `/nlore historico <player> [página]` — mostra concessões, transferências, drops e recolhimentos;
 - `/nlore historico apagar <player>` — OP 4; apaga os registros após confirmação;
+- `/nlore diagnostico <player>` — mostra itens ativos, portadores, prazos e inconsistências;
+- `/nlore reparar <player>` — corrige selos e arquiva metadados irrecuperáveis com segurança;
 - `/nlore cofre <player>` — abre as relíquias recolhidas;
 - `/nlore cofre <player> restaurar <slot> <duração>` — restaura com novo prazo;
 - `/nlore cofre <player> manter <slot>` — restaura como item permanente;
@@ -108,6 +111,8 @@ Segure o item na mão principal e use:
 Durações aceitam `s`, `m`, `h` e `d`, por exemplo `30m`, `12h` e `7d`. O modo padrão é **vinculado**. Relíquias transferíveis mantêm o mesmo vencimento ao mudar de portador; vinculadas são recolhidas ao cair em mãos diferentes. O tempo continua correndo enquanto o jogador está offline.
 
 Ao vencer, a relíquia desaparece com mensagem, som e partículas e fica no cofre de lore por sete dias. Cada item possui um selo único, histórico independente e proteção contra cópias restauradas por rollback. Comidas e outros consumíveis continuam reduzindo sua pilha normalmente.
+
+O TAB sugere os selos ativos em `/nlore revogar`. O lore mostra a data e o tempo restante, atualizado por padrão a cada minuto. Permissões, avisos (`1d,1h,10m`), frequência de atualização e duração do cofre ficam em `serverconfig/noveris_lore-server.toml`.
 
 ## Plataforma e build
 

@@ -70,6 +70,8 @@ final class LoreItemData {
         return id;
     }
 
+    static void refreshLore(ItemStack stack) { read(stack).ifPresent(info -> updateLore(stack, info)); }
+
     static void makePermanent(ItemStack stack) {
         CompoundTag root = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
         root.remove(ROOT);
@@ -96,8 +98,19 @@ final class LoreItemData {
                 .withStyle(info.transferable() ? ChatFormatting.GREEN : ChatFormatting.LIGHT_PURPLE));
         lines.add(Component.literal("Expira em " + TIME.format(Instant.ofEpochMilli(info.expiresAt())))
                 .withStyle(ChatFormatting.YELLOW));
+        lines.add(Component.literal("Tempo restante: " + remaining(info.expiresAt() - System.currentTimeMillis()))
+                .withStyle(ChatFormatting.GOLD));
         if (!info.reason().isBlank()) lines.add(Component.literal(info.reason()).withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC));
         stack.set(DataComponents.LORE, new ItemLore(lines));
+    }
+
+    private static String remaining(long millis) {
+        if (millis <= 0) return "encerrado";
+        long minutes = Math.max(1, (millis + 59_999L) / 60_000L);
+        long days = minutes / 1440, hours = minutes % 1440 / 60, rest = minutes % 60;
+        if (days > 0) return days + "d " + hours + "h";
+        if (hours > 0) return hours + "h " + rest + "m";
+        return rest + "m";
     }
 
     private static int findMarker(List<Component> lines) {

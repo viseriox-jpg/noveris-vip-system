@@ -29,9 +29,9 @@ final class LoreService {
     private MinecraftServer server;
     private int ticks;
     private final Map<UUID, UUID> lastHolder = new HashMap<>();
-    private final Set<String> warnings = new HashSet<>();
     private final ArrayDeque<Container> containers = new ArrayDeque<>();
     private final Set<Container> queued = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Set<Container> loadedContainers = Collections.newSetFromMap(new IdentityHashMap<>());
 
     private LoreStore store(MinecraftServer current) {
         if (store == null || server != current) { server = current; store = LoreStore.load(current); }
@@ -75,14 +75,20 @@ final class LoreService {
         return true;
     }
 
-    void queue(Container container) { if (queued.add(container)) containers.addLast(container); }
+    void queue(Container container) {
+        loadedContainers.add(container);
+        if (queued.add(container)) containers.addLast(container);
+    }
 
     void tick(MinecraftServer server) {
         processContainers(server);
         if (++ticks % 20 != 0) return;
         LoreStore current = store(server);
+        LoreConfig config = LoreConfig.load(server);
         Set<UUID> seen = new HashSet<>();
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) scanPlayer(current, player, seen);
+        boolean refreshLore = ticks % (config.refreshSeconds * 20) == 0;
+        for (ServerPlayer player : server.getPlayerList().getPlayers())
+            scanPlayer(current, player, seen, config, refreshLore);
         if (ticks % 1200 == 0) {
             scanDropped(server, current);
             current.purge();
@@ -90,10 +96,12 @@ final class LoreService {
         }
     }
 
-    private void scanPlayer(LoreStore current, ServerPlayer player, Set<UUID> seen) {
+    private void scanPlayer(LoreStore current, ServerPlayer player, Set<UUID> seen,
+                            LoreConfig config, boolean refreshLore) {
         for (ItemStack stack : allStacks(player)) {
             LoreItemData.Info info = LoreItemData.read(stack).orElse(null);
             if (info == null || stack.isEmpty()) continue;
+            if (refreshLore) LoreItemData.refreshLore(stack);
             if (current.data.retiredIds.contains(info.itemId().toString())) {
                 String name = stack.getHoverName().getString();
                 stack.setCount(0);
@@ -107,7 +115,7 @@ final class LoreService {
             }
             if (!info.transferable() && !info.owner().equals(player.getUUID())) {
                 ItemStack archived = stack.copy();
-                current.archive(archived, player.registryAccess(), "vínculo rompido");
+                current.archive(archived, player.registryAccess(), "vínculo rompido", config.vaultDays);
                 stack.setCount(0);
                 current.history(player.getUUID(), player.getName().getString(), "RELIQUIA_RECUSOU_PORTADOR",
                         archived.getHoverName().getString() + " | pertence a: " + info.ownerName());
@@ -123,12 +131,11 @@ final class LoreService {
                 current.save();
             }
             long remaining = info.expiresAt() - System.currentTimeMillis();
-            if (remaining > 60_000L)
-                warn(player, info, stack.getHoverName().getString(), remaining, 600_000L, "10 minutos");
-            warn(player, info, stack.getHoverName().getString(), remaining, 60_000L, "1 minuto");
+            for (long warning : config.warningMillis)
+                warn(current, player, info, stack.getHoverName().getString(), remaining, warning);
             if (info.expiresAt() <= System.currentTimeMillis()) {
                 ItemStack archived = stack.copy();
-                current.archive(archived, player.registryAccess(), "tempo encerrado");
+                current.archive(archived, player.registryAccess(), "tempo encerrado", config.vaultDays);
                 stack.setCount(0);
                 notifyRemoval(player, archived.getHoverName().getString(),
                         "Seu tempo com esta relíquia terminou. A vontade que a concedeu agora a reclama.");
@@ -137,15 +144,22 @@ final class LoreService {
         }
     }
 
-    private void warn(ServerPlayer player, LoreItemData.Info info, String item, long remaining,
-                      long threshold, String label) {
+    private void warn(LoreStore current, ServerPlayer player, LoreItemData.Info info, String item,
+                      long remaining, long threshold) {
         if (remaining <= 0 || remaining > threshold) return;
         String key = info.itemId() + ":" + threshold;
-        if (!warnings.add(key)) return;
+        if (!current.data.sentWarnings.add(key)) return;
         player.sendSystemMessage(Component.literal("✦ O VÍNCULO DE UMA RELÍQUIA ENFRAQUECE ✦")
                 .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)
-                .append(Component.literal("\n" + item + " será reclamado em menos de " + label + ".")
+                .append(Component.literal("\n" + item + " será reclamado em menos de " + durationLabel(threshold) + ".")
                         .withStyle(ChatFormatting.GRAY)));
+        current.save();
+    }
+
+    private String durationLabel(long millis) {
+        if (millis % 86_400_000L == 0) return millis / 86_400_000L + " dia(s)";
+        if (millis % 3_600_000L == 0) return millis / 3_600_000L + " hora(s)";
+        return Math.max(1, millis / 60_000L) + " minuto(s)";
     }
 
     private void notifyRemoval(ServerPlayer player, String item, String message) {
@@ -166,7 +180,8 @@ final class LoreService {
             if (info == null) continue;
             if (current.data.retiredIds.contains(info.itemId().toString())) { dropped.discard(); continue; }
             if (info.expiresAt() <= now) {
-                current.archive(stack.copy(), level.registryAccess(), "tempo encerrado no chão");
+                current.archive(stack.copy(), level.registryAccess(), "tempo encerrado no chão",
+                        LoreConfig.load(server).vaultDays);
                 dropped.discard();
                 current.save();
             }
@@ -186,7 +201,8 @@ final class LoreService {
                 if (info == null) continue;
                 if (current.data.retiredIds.contains(info.itemId().toString())) { stack.setCount(0); changed = true; }
                 else if (info.expiresAt() <= now) {
-                    current.archive(stack.copy(), server.registryAccess(), "tempo encerrado em recipiente");
+                    current.archive(stack.copy(), server.registryAccess(), "tempo encerrado em recipiente",
+                            LoreConfig.load(server).vaultDays);
                     stack.setCount(0); changed = true;
                 }
             }
@@ -196,18 +212,117 @@ final class LoreService {
 
     boolean revoke(ServerPlayer staff, ServerPlayer target, String idPrefix) {
         LoreStore current = store(staff.getServer());
-        for (ItemStack stack : allStacks(target)) {
+        for (ServerPlayer holder : staff.getServer().getPlayerList().getPlayers()) for (ItemStack stack : allStacks(holder)) {
             LoreItemData.Info info = LoreItemData.read(stack).orElse(null);
-            if (info == null || !info.itemId().toString().startsWith(idPrefix.toLowerCase())) continue;
+            if (info == null || !info.owner().equals(target.getUUID())
+                    || !info.itemId().toString().startsWith(idPrefix.toLowerCase())) continue;
             ItemStack archived = stack.copy();
-            current.archive(archived, target.registryAccess(), "revogação administrativa");
+            current.archive(archived, holder.registryAccess(), "revogação administrativa",
+                    LoreConfig.load(staff.getServer()).vaultDays);
             stack.setCount(0);
-            notifyRemoval(target, archived.getHoverName().getString(),
+            notifyRemoval(holder, archived.getHoverName().getString(),
                     "A concessão foi encerrada antes de seu tempo.");
             current.save();
             return true;
         }
+        for (Container container : loadedContainers) for (int slot = 0; slot < container.getContainerSize(); slot++) {
+            ItemStack stack = container.getItem(slot);
+            LoreItemData.Info info = LoreItemData.read(stack).orElse(null);
+            if (info == null || !info.owner().equals(target.getUUID())
+                    || !info.itemId().toString().startsWith(idPrefix.toLowerCase())) continue;
+            current.archive(stack.copy(), staff.registryAccess(), "revogação administrativa em recipiente",
+                    LoreConfig.load(staff.getServer()).vaultDays);
+            stack.setCount(0); container.setChanged(); current.save(); return true;
+        }
+        for (var level : staff.getServer().getAllLevels()) for (var entity : level.getAllEntities()) {
+            if (!(entity instanceof ItemEntity dropped)) continue;
+            LoreItemData.Info info = LoreItemData.read(dropped.getItem()).orElse(null);
+            if (info == null || !info.owner().equals(target.getUUID())
+                    || !info.itemId().toString().startsWith(idPrefix.toLowerCase())) continue;
+            current.archive(dropped.getItem().copy(), level.registryAccess(), "revogação administrativa no chão",
+                    LoreConfig.load(staff.getServer()).vaultDays);
+            dropped.discard(); current.save(); return true;
+        }
         return false;
+    }
+
+    List<ActiveRelic> activeRelics(ServerPlayer target) {
+        List<ActiveRelic> result = new ArrayList<>();
+        for (ServerPlayer holder : target.getServer().getPlayerList().getPlayers()) for (ItemStack stack : allStacks(holder))
+            LoreItemData.read(stack).filter(info -> info.owner().equals(target.getUUID())).ifPresent(info -> result.add(
+                    new ActiveRelic(info.itemId(), stack.getHoverName().getString(), info.expiresAt(),
+                            info.transferable(), holder.getName().getString(), stack.copy())));
+        for (Container container : loadedContainers) for (int slot = 0; slot < container.getContainerSize(); slot++) {
+            ItemStack stack = container.getItem(slot);
+            LoreItemData.read(stack).filter(info -> info.owner().equals(target.getUUID())).ifPresent(info -> result.add(
+                    new ActiveRelic(info.itemId(), stack.getHoverName().getString(), info.expiresAt(),
+                            info.transferable(), "recipiente carregado", stack.copy())));
+        }
+        for (var level : target.getServer().getAllLevels()) for (var entity : level.getAllEntities()) {
+            if (!(entity instanceof ItemEntity dropped)) continue;
+            ItemStack stack = dropped.getItem();
+            LoreItemData.read(stack).filter(info -> info.owner().equals(target.getUUID())).ifPresent(info -> result.add(
+                    new ActiveRelic(info.itemId(), stack.getHoverName().getString(), info.expiresAt(),
+                            info.transferable(), "no chão", stack.copy())));
+        }
+        return result;
+    }
+
+    List<String> activeSeals(ServerPlayer target) {
+        return activeRelics(target).stream().map(relic -> relic.id().toString().substring(0, 8)).toList();
+    }
+
+    Diagnosis diagnose(ServerPlayer target) {
+        LoreStore current = store(target.getServer());
+        Set<UUID> ids = new HashSet<>();
+        int active = 0, duplicates = 0, malformed = 0, retired = 0, transferred = 0;
+        long soonest = Long.MAX_VALUE;
+        for (ItemStack stack : allStacks(target)) {
+            if (!LoreItemData.hasTag(stack)) continue;
+            LoreItemData.Info info = LoreItemData.read(stack).orElse(null);
+            if (info == null) { malformed++; continue; }
+            active++;
+            if (!ids.add(info.itemId())) duplicates++;
+            if (current.data.retiredIds.contains(info.itemId().toString())) retired++;
+            if (!info.owner().equals(target.getUUID())) transferred++;
+            soonest = Math.min(soonest, info.expiresAt());
+        }
+        int vault = current.data.vault.getOrDefault(target.getUUID().toString(), List.of()).size();
+        int knownActive = activeRelics(target).size();
+        return new Diagnosis(active, transferred, vault, duplicates, malformed, retired,
+                soonest == Long.MAX_VALUE ? 0 : soonest, knownActive);
+    }
+
+    Repair repair(ServerPlayer staff, ServerPlayer target) {
+        LoreStore current = store(target.getServer());
+        Set<UUID> ids = new HashSet<>();
+        int reidentified = 0, archived = 0, removedRollback = 0;
+        LoreConfig config = LoreConfig.load(target.getServer());
+        for (ItemStack stack : allStacks(target)) {
+            if (!LoreItemData.hasTag(stack)) continue;
+            LoreItemData.Info info = LoreItemData.read(stack).orElse(null);
+            if (info == null) {
+                current.archiveMalformed(target.getUUID(), target.getName().getString(), stack.copy(),
+                        target.registryAccess(), "metadados incompletos", config.vaultDays);
+                stack.setCount(0); archived++; continue;
+            }
+            if (current.data.retiredIds.contains(info.itemId().toString())) {
+                stack.setCount(0); removedRollback++; continue;
+            }
+            if (!ids.add(info.itemId())) { LoreItemData.reidentify(stack); reidentified++; }
+            LoreItemData.refreshLore(stack);
+        }
+        current.history(target.getUUID(), target.getName().getString(), "RELIQUIAS_REPARADAS",
+                "selos corrigidos: " + reidentified + " | arquivadas: " + archived
+                        + " | rollback removido: " + removedRollback + " | staff: " + staff.getName().getString());
+        current.save();
+        return new Repair(reidentified, archived, removedRollback);
+    }
+
+    void openRevokeMenu(ServerPlayer staff, ServerPlayer target) {
+        staff.openMenu(new SimpleMenuProvider((id, inventory, ignored) ->
+                new LoreRevokeMenu(id, inventory, new SimpleContainer(54), this, target),
+                Component.literal("Revogar relíquia — " + target.getName().getString())));
     }
 
     void openVault(ServerPlayer staff, ServerPlayer target) {
@@ -228,6 +343,7 @@ final class LoreService {
         if (entry.deleteAt() <= System.currentTimeMillis()) return Result.EXPIRED;
         ItemStack stack = VipStore.decode(entry.encodedStack(), target.registryAccess());
         if (stack.isEmpty()) return Result.INVALID_ITEM;
+        if (!permanent && LoreItemData.read(stack).isEmpty()) return Result.INVALID_ITEM;
         if (permanent) LoreItemData.makePermanent(stack);
         else LoreItemData.restore(stack, System.currentTimeMillis() + duration);
         entries.remove(slot - 1);
@@ -256,4 +372,9 @@ final class LoreService {
     }
 
     enum Result { SUCCESS, INVALID_SLOT, EXPIRED, INVALID_ITEM }
+    record ActiveRelic(UUID id, String name, long expiresAt, boolean transferable,
+                       String holder, ItemStack display) {}
+    record Diagnosis(int active, int transferred, int vault, int duplicates,
+                     int malformed, int retiredCopies, long soonestExpiry, int knownActive) {}
+    record Repair(int reidentified, int archived, int removedRollback) {}
 }

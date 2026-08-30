@@ -41,7 +41,7 @@ final class LoreEvents {
                     return 1;
                 }))
                 .then(Commands.literal("temporario")
-                        .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).grant))
+                        .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).createPermission))
                         .then(Commands.literal("mao")
                                 .then(Commands.argument("duracao", StringArgumentType.word()).suggests(this::suggestDurations)
                                         .executes(ctx -> createHeld(ctx, false, ""))
@@ -58,27 +58,43 @@ final class LoreEvents {
                                                 .then(Commands.argument("motivo", StringArgumentType.greedyString())
                                                         .executes(ctx -> grant(ctx, mode(ctx),
                                                                 StringArgumentType.getString(ctx, "motivo"))))))))
-                .then(Commands.literal("revogar").requires(source -> source.hasPermission(4))
+                .then(Commands.literal("revogar").requires(source -> source.hasPermission(
+                                LoreConfig.load(source.getServer()).maintenancePermission))
                         .then(Commands.argument("player", EntityArgument.player())
-                                .then(Commands.argument("id", StringArgumentType.word()).executes(this::revoke))))
+                                .executes(this::openRevoke)
+                                .then(Commands.argument("id", StringArgumentType.word())
+                                        .suggests(this::suggestSeals).executes(this::revoke))))
                 .then(Commands.literal("historico")
-                        .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).history))
-                        .then(Commands.literal("apagar").requires(source -> source.hasPermission(4))
+                        .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).viewPermission))
+                        .then(Commands.literal("apagar").requires(source -> source.hasPermission(
+                                        LoreConfig.load(source.getServer()).maintenancePermission))
                                 .then(Commands.argument("player", EntityArgument.player())
                                         .executes(this::requestClearHistory)
                                         .then(Commands.literal("confirmar").executes(this::clearHistory))))
-                        .then(Commands.argument("player", EntityArgument.player()).executes(this::history)))
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(ctx -> history(ctx, 1))
+                                .then(Commands.argument("pagina", IntegerArgumentType.integer(1))
+                                        .executes(ctx -> history(ctx, IntegerArgumentType.getInteger(ctx, "pagina"))))))
+                .then(Commands.literal("diagnostico")
+                        .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).viewPermission))
+                        .then(Commands.argument("player", EntityArgument.player()).executes(this::diagnose)))
+                .then(Commands.literal("reparar")
+                        .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).maintenancePermission))
+                        .then(Commands.argument("player", EntityArgument.player()).executes(this::repair)))
                 .then(Commands.literal("cofre")
-                        .requires(source -> source.hasPermission(VipConfig.load(source.getServer()).vault))
+                        .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).viewPermission))
                         .then(Commands.argument("player", EntityArgument.player()).executes(this::vault)
                                 .then(Commands.literal("restaurar")
+                                        .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).maintenancePermission))
                                         .then(Commands.argument("slot", IntegerArgumentType.integer(1, 54))
                                                 .then(Commands.argument("duracao", StringArgumentType.word())
                                                         .suggests(this::suggestDurations).executes(ctx -> restore(ctx, false)))))
                                 .then(Commands.literal("manter")
+                                        .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).maintenancePermission))
                                         .then(Commands.argument("slot", IntegerArgumentType.integer(1, 54))
                                                 .executes(ctx -> restore(ctx, true))))
                                 .then(Commands.literal("excluir")
+                                        .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).maintenancePermission))
                                         .then(Commands.argument("slot", IntegerArgumentType.integer(1, 54))
                                                 .executes(this::deleteVault))))));
     }
@@ -91,6 +107,8 @@ final class LoreEvents {
                 .append(Component.literal("/nlore temporario mao <duração> [modo] [motivo]\n").withStyle(ChatFormatting.AQUA))
                 .append(Component.literal("/nlore revogar <player> <início-do-id>\n").withStyle(ChatFormatting.AQUA))
                 .append(Component.literal("/nlore historico <player>\n/nlore historico apagar <player>\n/nlore cofre <player>")
+                        .withStyle(ChatFormatting.AQUA))
+                .append(Component.literal("\n/nlore diagnostico <player>\n/nlore reparar <player>")
                         .withStyle(ChatFormatting.AQUA)), false);
         return 1;
     }
@@ -147,18 +165,77 @@ final class LoreEvents {
         return 1;
     }
 
-    private int history(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+    private int openRevoke(CommandContext<CommandSourceStack> ctx)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        service.openRevokeMenu(ctx.getSource().getPlayerOrException(), EntityArgument.getPlayer(ctx, "player"));
+        return 1;
+    }
+
+    private int history(CommandContext<CommandSourceStack> ctx, int page) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
         List<LoreStore.Entry> entries = service.data(ctx.getSource().getServer()).data.history
                 .getOrDefault(target.getUUID().toString(), List.of());
-        ctx.getSource().sendSuccess(() -> Component.literal("✦ HISTÓRICO DE RELÍQUIAS — " + target.getName().getString() + " ✦")
+        if (entries.isEmpty()) { ctx.getSource().sendFailure(Component.literal("Nenhum registro de relíquia.")); return 0; }
+        int pageSize = 6, pages = (entries.size() + pageSize - 1) / pageSize;
+        if (page > pages) { ctx.getSource().sendFailure(Component.literal("Página inexistente. Máximo: " + pages)); return 0; }
+        ctx.getSource().sendSuccess(() -> Component.literal("✦ HISTÓRICO DE RELÍQUIAS — " + target.getName().getString()
+                        + " • " + page + "/" + pages + " ✦")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), false);
-        entries.stream().skip(Math.max(0, entries.size() - 10L)).forEach(entry ->
+        int from = Math.max(0, entries.size() - page * pageSize);
+        int to = entries.size() - (page - 1) * pageSize;
+        entries.subList(from, to).forEach(entry ->
                 ctx.getSource().sendSuccess(() -> Component.literal("[" + TIME.format(Instant.ofEpochMilli(entry.timestamp())) + "] ")
                         .withStyle(ChatFormatting.DARK_GRAY)
                         .append(Component.literal(entry.action().replace('_', ' ')).withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
                         .append(Component.literal("\n  " + entry.detail()).withStyle(ChatFormatting.GRAY)), false));
+        Component previous = Component.literal("[← ANTERIOR]").withStyle(style -> style
+                .withColor(page > 1 ? ChatFormatting.AQUA : ChatFormatting.DARK_GRAY).withBold(true)
+                .withClickEvent(page > 1 ? new ClickEvent(ClickEvent.Action.RUN_COMMAND,
+                        "/nlore historico " + target.getName().getString() + " " + (page - 1)) : null));
+        Component next = Component.literal("[PRÓXIMA →]").withStyle(style -> style
+                .withColor(page < pages ? ChatFormatting.AQUA : ChatFormatting.DARK_GRAY).withBold(true)
+                .withClickEvent(page < pages ? new ClickEvent(ClickEvent.Action.RUN_COMMAND,
+                        "/nlore historico " + target.getName().getString() + " " + (page + 1)) : null));
+        if (pages > 1) ctx.getSource().sendSuccess(() -> Component.empty().append(previous)
+                .append(Component.literal("   ")).append(next), false);
         return entries.size();
+    }
+
+    private int diagnose(CommandContext<CommandSourceStack> ctx)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        LoreService.Diagnosis result = service.diagnose(target);
+        long remaining = result.soonestExpiry() == 0 ? 0 : Math.max(0, result.soonestExpiry() - System.currentTimeMillis());
+        int issues = result.duplicates() + result.malformed() + result.retiredCopies();
+        ctx.getSource().sendSuccess(() -> Component.literal("✦ DIAGNÓSTICO DE RELÍQUIAS — " + target.getName().getString() + " ✦")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
+                .append(Component.literal("\nNo inventário: " + result.active() + " | localizadas no total: "
+                        + result.knownActive() + " | recebidas de terceiros: " + result.transferred()
+                        + " | no cofre: " + result.vault()).withStyle(ChatFormatting.GRAY))
+                .append(Component.literal("\nPróximo vencimento: " + (result.soonestExpiry() == 0 ? "nenhum"
+                        : durationText(remaining))).withStyle(ChatFormatting.YELLOW))
+                .append(Component.literal("\nSelos duplicados: " + result.duplicates() + " | metadados inválidos: "
+                        + result.malformed() + " | cópias de rollback: " + result.retiredCopies())
+                        .withStyle(issues == 0 ? ChatFormatting.GREEN : ChatFormatting.RED)), false);
+        return issues == 0 ? 1 : issues;
+    }
+
+    private int repair(CommandContext<CommandSourceStack> ctx)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        LoreService.Repair result = service.repair(ctx.getSource().getPlayerOrException(), target);
+        ctx.getSource().sendSuccess(() -> Component.literal("✔ REPARO DE RELÍQUIAS CONCLUÍDO")
+                .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD)
+                .append(Component.literal("\nSelos corrigidos: " + result.reidentified()
+                        + " | arquivadas com segurança: " + result.archived()
+                        + " | cópias de rollback removidas: " + result.removedRollback())
+                        .withStyle(ChatFormatting.GRAY)), true);
+        return 1;
+    }
+
+    private String durationText(long millis) {
+        long minutes = Math.max(0, millis / 60_000L), days = minutes / 1440, hours = minutes % 1440 / 60;
+        return days > 0 ? days + "d " + hours + "h" : hours > 0 ? hours + "h " + minutes % 60 + "m" : minutes + "m";
     }
 
     private int requestClearHistory(CommandContext<CommandSourceStack> ctx)
@@ -220,6 +297,14 @@ final class LoreEvents {
     private java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestModes(
             CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
         return SharedSuggestionProvider.suggest(List.of("vinculado", "transferivel"), builder);
+    }
+
+    private java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestSeals(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        try { return SharedSuggestionProvider.suggest(service.activeSeals(EntityArgument.getPlayer(ctx, "player")), builder); }
+        catch (com.mojang.brigadier.exceptions.CommandSyntaxException exception) {
+            return SharedSuggestionProvider.suggest(List.of(), builder);
+        }
     }
 
     @SubscribeEvent public void tick(ServerTickEvent.Post event) { service.tick(event.getServer()); }

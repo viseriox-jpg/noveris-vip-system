@@ -20,7 +20,6 @@ import java.util.UUID;
 
 final class LoreStore {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final long RETENTION = 7L * 24 * 60 * 60 * 1000;
     private final Path file;
     final Data data;
 
@@ -53,16 +52,26 @@ final class LoreStore {
         return removed == null ? 0 : removed.size();
     }
 
-    void archive(ItemStack stack, HolderLookup.Provider registries, String cause) {
+    void archive(ItemStack stack, HolderLookup.Provider registries, String cause, int retentionDays) {
         LoreItemData.Info info = LoreItemData.read(stack).orElseThrow();
         long now = System.currentTimeMillis();
         data.retiredIds.add(info.itemId().toString());
         data.retired.put(info.itemId().toString(), new Retired(now, stack.getHoverName().getString(), info.ownerName()));
         data.vault.computeIfAbsent(info.owner().toString(), ignored -> new ArrayList<>()).add(
-                new VaultEntry(VipStore.encode(stack, registries), now, now + RETENTION,
+                new VaultEntry(VipStore.encode(stack, registries), now, now + retentionDays * 86_400_000L,
                         stack.getHoverName().getString(), cause));
         history(info.owner(), info.ownerName(), "RELIQUIA_RECOLHIDA",
                 stack.getHoverName().getString() + " | motivo: " + cause + " | id: " + info.itemId());
+    }
+
+    void archiveMalformed(UUID owner, String ownerName, ItemStack stack, HolderLookup.Provider registries,
+                          String cause, int retentionDays) {
+        long now = System.currentTimeMillis();
+        data.vault.computeIfAbsent(owner.toString(), ignored -> new ArrayList<>()).add(
+                new VaultEntry(VipStore.encode(stack, registries), now,
+                        now + retentionDays * 86_400_000L, stack.getHoverName().getString(), cause));
+        history(owner, ownerName, "RELIQUIA_INCONSISTENTE_ARQUIVADA",
+                stack.getHoverName().getString() + " | motivo: " + cause);
     }
 
     void purge() {
@@ -79,11 +88,13 @@ final class LoreStore {
         Map<String, List<Entry>> history;
         Set<String> retiredIds;
         Map<String, Retired> retired;
+        Set<String> sentWarnings;
         Data normalize() {
             if (vault == null) vault = new HashMap<>();
             if (history == null) history = new HashMap<>();
             if (retiredIds == null) retiredIds = new HashSet<>();
             if (retired == null) retired = new HashMap<>();
+            if (sentWarnings == null) sentWarnings = new HashSet<>();
             return this;
         }
     }
