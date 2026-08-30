@@ -21,6 +21,10 @@ final class LoreConfig {
             "warning_times = \"1d,1h,10m\"",
             "lore_refresh_seconds = 60",
             "performance_warn_ms = 25",
+            "containers_per_tick = 8",
+            "mod_handlers_per_tick = 4",
+            "entity_scan_seconds = 5",
+            "nested_inventory_depth = 2",
             "message_grant_title = \"✦ UMA RELÍQUIA LHE FOI CONCEDIDA ✦\"",
             "message_grant_body = \"{item} permanecerá em suas mãos enquanto durar a vontade que a concedeu.\"",
             "message_warning_title = \"✦ O VÍNCULO DE UMA RELÍQUIA ENFRAQUECE ✦\"",
@@ -29,6 +33,7 @@ final class LoreConfig {
             "message_expired_body = \"Seu tempo com esta relíquia terminou. A vontade que a concedeu agora a reclama.\""
     );
     final int createPermission, viewPermission, maintenancePermission, vaultDays, refreshSeconds, performanceWarnMs;
+    final int containersPerTick, modHandlersPerTick, entityScanSeconds, nestedInventoryDepth;
     final long[] warningMillis;
     final String grantTitle, grantBody, warningTitle, warningBody, revokeTitle, expiredBody;
 
@@ -39,6 +44,10 @@ final class LoreConfig {
         vaultDays = number(values, "vault_retention_days", 7, 1, 365);
         refreshSeconds = number(values, "lore_refresh_seconds", 60, 10, 3600);
         performanceWarnMs = number(values, "performance_warn_ms", 25, 1, 1000);
+        containersPerTick = number(values, "containers_per_tick", 8, 1, 128);
+        modHandlersPerTick = number(values, "mod_handlers_per_tick", 4, 1, 64);
+        entityScanSeconds = number(values, "entity_scan_seconds", 5, 1, 300);
+        nestedInventoryDepth = number(values, "nested_inventory_depth", 2, 0, 5);
         warningMillis = java.util.Arrays.stream(values.getOrDefault("warning_times", "1d,1h,10m").split(","))
                 .map(String::trim).mapToLong(LoreConfig::duration).filter(value -> value > 0).distinct().sorted().toArray();
         grantTitle = text(values, "message_grant_title", "✦ UMA RELÍQUIA LHE FOI CONCEDIDA ✦");

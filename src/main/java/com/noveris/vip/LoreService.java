@@ -2,6 +2,7 @@ package com.noveris.vip;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -11,7 +12,11 @@ import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.items.IItemHandler;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -27,12 +32,17 @@ import java.util.UUID;
 final class LoreService {
     private LoreStore store;
     private MinecraftServer server;
+    private LoreConfig cachedConfig;
+    private MinecraftServer configServer;
+    private long configLoadedAt;
     private int ticks;
     private long lastScanNanos, maxScanNanos, slowScans, lastPerformanceWarning;
     private final Map<UUID, UUID> lastHolder = new HashMap<>();
     private final ArrayDeque<Container> containers = new ArrayDeque<>();
     private final Set<Container> queued = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<Container> loadedContainers = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final ArrayDeque<BlockEntity> blockEntities = new ArrayDeque<>();
+    private final Set<BlockEntity> loadedBlockEntities = Collections.newSetFromMap(new IdentityHashMap<>());
 
     private LoreStore store(MinecraftServer current) {
         if (store == null || server != current) { server = current; store = LoreStore.load(current); }
@@ -40,6 +50,16 @@ final class LoreService {
     }
 
     LoreStore data(MinecraftServer server) { return store(server); }
+
+    private LoreConfig config(MinecraftServer server) {
+        long now = System.currentTimeMillis();
+        if (cachedConfig == null || configServer != server || now - configLoadedAt >= 5_000L) {
+            cachedConfig = LoreConfig.load(server);
+            configServer = server;
+            configLoadedAt = now;
+        }
+        return cachedConfig;
+    }
 
     boolean grant(ServerPlayer staff, ServerPlayer target, long durationMillis,
                   boolean transferable, String reason) {
@@ -56,7 +76,7 @@ final class LoreService {
                         + " | selo: " + LoreItemData.read(granted).orElseThrow().itemId()
                         + " | staff: " + staff.getName().getString());
         current.save();
-        LoreConfig config = LoreConfig.load(staff.getServer());
+        LoreConfig config = config(staff.getServer());
         target.sendSystemMessage(Component.literal(config.grantTitle)
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
                 .append(Component.literal("\n" + config.grantBody.replace("{item}", granted.getHoverName().getString()))
@@ -81,10 +101,21 @@ final class LoreService {
         if (queued.add(container)) containers.addLast(container);
     }
 
+    void queue(BlockEntity blockEntity) {
+        if (blockEntity instanceof Container container) { queue(container); return; }
+        if (loadedBlockEntities.add(blockEntity)) blockEntities.addLast(blockEntity);
+    }
+
     void unload(Container container) {
         loadedContainers.remove(container);
         queued.remove(container);
         containers.remove(container);
+    }
+
+    void unload(BlockEntity blockEntity) {
+        if (blockEntity instanceof Container container) { unload(container); return; }
+        loadedBlockEntities.remove(blockEntity);
+        blockEntities.remove(blockEntity);
     }
 
     void tick(MinecraftServer server) {
@@ -92,13 +123,13 @@ final class LoreService {
         processContainers(server);
         if (++ticks % 20 != 0) { recordPerformance(server, started, false); return; }
         LoreStore current = store(server);
-        LoreConfig config = LoreConfig.load(server);
+        LoreConfig config = config(server);
         Set<UUID> seen = new HashSet<>();
         boolean refreshLore = ticks % (config.refreshSeconds * 20) == 0;
         for (ServerPlayer player : server.getPlayerList().getPlayers())
             scanPlayer(current, player, seen, config, refreshLore);
+        if (ticks % (config.entityScanSeconds * 20) == 0) scanWorldEntities(server, current);
         if (ticks % 1200 == 0) {
-            scanDropped(server, current);
             current.purge();
             current.save();
         }
@@ -109,7 +140,7 @@ final class LoreService {
         lastScanNanos = System.nanoTime() - started;
         maxScanNanos = Math.max(maxScanNanos, lastScanNanos);
         if (!evaluateWarning) return;
-        LoreConfig config = LoreConfig.load(server);
+        LoreConfig config = config(server);
         if (lastScanNanos >= config.performanceWarnMs * 1_000_000L) {
             slowScans++;
             long now = System.currentTimeMillis();
@@ -122,12 +153,14 @@ final class LoreService {
     }
 
     Performance performance() {
-        return new Performance(lastScanNanos, maxScanNanos, slowScans, loadedContainers.size(), containers.size());
+        return new Performance(lastScanNanos, maxScanNanos, slowScans, loadedContainers.size(), containers.size(),
+                loadedBlockEntities.size(), blockEntities.size());
     }
 
     private void scanPlayer(LoreStore current, ServerPlayer player, Set<UUID> seen,
                             LoreConfig config, boolean refreshLore) {
         for (ItemStack stack : allStacks(player)) {
+            scanNestedStack(player.getServer(), stack, "mochila de " + player.getName().getString(), 0);
             LoreItemData.Info info = LoreItemData.read(stack).orElse(null);
             if (info == null || stack.isEmpty()) continue;
             if (refreshLore) LoreItemData.refreshLore(stack);
@@ -178,7 +211,7 @@ final class LoreService {
         if (remaining <= 0 || remaining > threshold) return;
         String key = info.itemId() + ":" + threshold;
         if (!current.data.sentWarnings.add(key)) return;
-        LoreConfig config = LoreConfig.load(player.getServer());
+        LoreConfig config = config(player.getServer());
         player.sendSystemMessage(Component.literal(config.warningTitle)
                 .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)
                 .append(Component.literal("\n" + config.warningBody.replace("{item}", item)
@@ -194,7 +227,7 @@ final class LoreService {
     }
 
     private void notifyRemoval(ServerPlayer player, String item, String message) {
-        LoreConfig config = LoreConfig.load(player.getServer());
+        LoreConfig config = config(player.getServer());
         player.sendSystemMessage(Component.literal(config.revokeTitle)
                 .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD)
                 .append(Component.literal("\n" + item + "\n" + message).withStyle(ChatFormatting.GRAY)));
@@ -203,45 +236,129 @@ final class LoreService {
         player.playNotifySound(SoundEvents.BEACON_DEACTIVATE, SoundSource.MASTER, 0.8F, 0.7F);
     }
 
-    private void scanDropped(MinecraftServer server, LoreStore current) {
+    private void scanWorldEntities(MinecraftServer server, LoreStore current) {
         long now = System.currentTimeMillis();
         for (var level : server.getAllLevels()) for (var entity : level.getAllEntities()) {
-            if (!(entity instanceof ItemEntity dropped)) continue;
-            ItemStack stack = dropped.getItem();
+            ItemStack stack;
+            String location;
+            if (entity instanceof ItemEntity dropped) {
+                stack = dropped.getItem(); location = "no chão";
+            } else if (entity instanceof ItemFrame frame) {
+                stack = frame.getItem(); location = "em moldura";
+            } else continue;
             LoreItemData.Info info = LoreItemData.read(stack).orElse(null);
             if (info == null) continue;
-            if (current.data.retiredIds.contains(info.itemId().toString())) { dropped.discard(); continue; }
+            if (current.data.retiredIds.contains(info.itemId().toString())) {
+                if (entity instanceof ItemEntity dropped) dropped.discard();
+                else ((ItemFrame) entity).setItem(ItemStack.EMPTY);
+                continue;
+            }
             if (info.expiresAt() <= now) {
-                current.archive(stack.copy(), level.registryAccess(), "tempo encerrado no chão",
-                        LoreConfig.load(server).vaultDays);
-                dropped.discard();
+                current.archive(stack.copy(), level.registryAccess(), "tempo encerrado " + location,
+                        config(server).vaultDays);
+                current.history(info.owner(), info.ownerName(), "RELIQUIA_RECOLHIDA",
+                        stack.getHoverName().getString() + " | " + location + " | " + entity.blockPosition());
+                if (entity instanceof ItemEntity dropped) dropped.discard();
+                else ((ItemFrame) entity).setItem(ItemStack.EMPTY);
                 current.save();
             }
         }
     }
 
     private void processContainers(MinecraftServer server) {
-        for (int processed = 0; processed < 8 && !containers.isEmpty(); processed++) {
+        LoreConfig config = config(server);
+        for (int processed = 0; processed < config.containersPerTick && !containers.isEmpty(); processed++) {
             Container container = containers.removeFirst();
-            queued.remove(container);
             if (container instanceof net.minecraft.world.level.block.entity.BlockEntity blockEntity
-                    && blockEntity.isRemoved()) { loadedContainers.remove(container); continue; }
+                    && blockEntity.isRemoved()) { loadedContainers.remove(container); queued.remove(container); continue; }
             long now = System.currentTimeMillis();
             LoreStore current = store(server);
             boolean changed = false;
             for (int slot = 0; slot < container.getContainerSize(); slot++) {
                 ItemStack stack = container.getItem(slot);
+                scanNestedStack(server, stack, containerLabel(container), 0);
                 LoreItemData.Info info = LoreItemData.read(stack).orElse(null);
                 if (info == null) continue;
                 if (current.data.retiredIds.contains(info.itemId().toString())) { stack.setCount(0); changed = true; }
                 else if (info.expiresAt() <= now) {
-                    current.archive(stack.copy(), server.registryAccess(), "tempo encerrado em recipiente",
-                            LoreConfig.load(server).vaultDays);
+                    archiveFromStorage(server, current, stack, info, containerLabel(container));
                     stack.setCount(0); changed = true;
                 }
             }
             if (changed) { container.setChanged(); current.save(); }
+            if (loadedContainers.contains(container)) containers.addLast(container);
         }
+        for (int processed = 0; processed < config.modHandlersPerTick && !blockEntities.isEmpty(); processed++) {
+            BlockEntity blockEntity = blockEntities.removeFirst();
+            if (blockEntity.isRemoved() || blockEntity.getLevel() == null) {
+                loadedBlockEntities.remove(blockEntity); continue;
+            }
+            IItemHandler handler = null;
+            for (Direction side : Direction.values()) {
+                handler = blockEntity.getLevel().getCapability(Capabilities.ItemHandler.BLOCK,
+                        blockEntity.getBlockPos(), blockEntity.getBlockState(), blockEntity, side);
+                if (handler != null) break;
+            }
+            if (handler == null) handler = blockEntity.getLevel().getCapability(Capabilities.ItemHandler.BLOCK,
+                    blockEntity.getBlockPos(), blockEntity.getBlockState(), blockEntity, null);
+            if (handler != null) scanHandler(server, handler, blockEntityLabel(blockEntity));
+            if (loadedBlockEntities.contains(blockEntity)) blockEntities.addLast(blockEntity);
+        }
+    }
+
+    private void scanHandler(MinecraftServer server, IItemHandler handler, String location) {
+        scanHandler(server, handler, location, 0);
+    }
+
+    private void scanHandler(MinecraftServer server, IItemHandler handler, String location, int depth) {
+        LoreStore current = store(server);
+        boolean changed = false;
+        long now = System.currentTimeMillis();
+        for (int slot = 0; slot < handler.getSlots(); slot++) {
+            ItemStack stack = handler.getStackInSlot(slot);
+            scanNestedStack(server, stack, location, depth);
+            LoreItemData.Info info = LoreItemData.read(stack).orElse(null);
+            if (info == null) continue;
+            if (!current.data.retiredIds.contains(info.itemId().toString()) && info.expiresAt() > now) continue;
+            ItemStack removed = handler.extractItem(slot, stack.getCount(), false);
+            if (removed.isEmpty()) continue;
+            if (info.expiresAt() <= now) archiveFromStorage(server, current, removed, info, location);
+            changed = true;
+        }
+        if (changed) current.save();
+    }
+
+    private void scanNestedStack(MinecraftServer server, ItemStack stack, String parent, int depth) {
+        if (stack.isEmpty() || depth >= config(server).nestedInventoryDepth) return;
+        IItemHandler nested = stack.getCapability(Capabilities.ItemHandler.ITEM);
+        if (nested == null || nested.getSlots() == 0) return;
+        String type = stack.getItem().getClass().getName();
+        String location = type.startsWith("net.p3pp3rf1y.sophisticatedbackpacks")
+                ? "Sophisticated Backpack em " + parent : "inventário interno em " + parent;
+        scanHandler(server, nested, location, depth + 1);
+    }
+
+    private void archiveFromStorage(MinecraftServer server, LoreStore current, ItemStack stack,
+                                    LoreItemData.Info info, String location) {
+        current.archive(stack.copy(), server.registryAccess(), "tempo encerrado em " + location,
+                config(server).vaultDays);
+        current.history(info.owner(), info.ownerName(), "RELIQUIA_RECOLHIDA",
+                stack.getHoverName().getString() + " | " + location);
+    }
+
+    private String containerLabel(Container container) {
+        if (container instanceof BlockEntity blockEntity)
+            return blockEntityLabel(blockEntity);
+        return "recipiente " + container.getClass().getSimpleName();
+    }
+
+    private String blockEntityLabel(BlockEntity blockEntity) {
+        String type = blockEntity.getClass().getName();
+        String mod = type.startsWith("net.p3pp3rf1y.sophisticatedbackpacks") ? "Sophisticated Backpack"
+                : type.startsWith("net.p3pp3rf1y.sophisticatedstorage") ? "Sophisticated Storage"
+                : type.startsWith("com.tom.storagemod") ? "Tom's Storage"
+                : blockEntity.getBlockState().getBlock().getName().getString();
+        return mod + " em " + blockEntity.getBlockPos();
     }
 
     boolean revoke(ServerPlayer staff, ServerPlayer target, String idPrefix) {
@@ -256,7 +373,7 @@ final class LoreService {
                     || !info.itemId().toString().startsWith(idPrefix.toLowerCase())) continue;
             ItemStack archived = stack.copy();
             current.archive(archived, holder.registryAccess(), "revogação administrativa",
-                    LoreConfig.load(staff.getServer()).vaultDays);
+                    config(staff.getServer()).vaultDays);
             stack.setCount(0);
             notifyRemoval(holder, archived.getHoverName().getString(),
                     "A concessão foi encerrada antes de seu tempo.");
@@ -269,7 +386,7 @@ final class LoreService {
             if (info == null || !info.owner().equals(targetId)
                     || !info.itemId().toString().startsWith(idPrefix.toLowerCase())) continue;
             current.archive(stack.copy(), staff.registryAccess(), "revogação administrativa em recipiente",
-                    LoreConfig.load(staff.getServer()).vaultDays);
+                    config(staff.getServer()).vaultDays);
             stack.setCount(0); container.setChanged(); current.save(); return true;
         }
         for (var level : staff.getServer().getAllLevels()) for (var entity : level.getAllEntities()) {
@@ -278,7 +395,7 @@ final class LoreService {
             if (info == null || !info.owner().equals(targetId)
                     || !info.itemId().toString().startsWith(idPrefix.toLowerCase())) continue;
             current.archive(dropped.getItem().copy(), level.registryAccess(), "revogação administrativa no chão",
-                    LoreConfig.load(staff.getServer()).vaultDays);
+                    config(staff.getServer()).vaultDays);
             dropped.discard(); current.save(); return true;
         }
         return false;
@@ -358,7 +475,7 @@ final class LoreService {
         LoreStore current = store(target.getServer());
         Set<UUID> ids = new HashSet<>();
         int reidentified = 0, archived = 0, removedRollback = 0;
-        LoreConfig config = LoreConfig.load(target.getServer());
+        LoreConfig config = config(target.getServer());
         for (ItemStack stack : allStacks(target)) {
             if (!LoreItemData.hasTag(stack)) continue;
             LoreItemData.Info info = LoreItemData.read(stack).orElse(null);
@@ -449,5 +566,5 @@ final class LoreService {
                      int malformed, int retiredCopies, long soonestExpiry, int knownActive) {}
     record Repair(int reidentified, int archived, int removedRollback) {}
     record Performance(long lastNanos, long maxNanos, long slowScans,
-                       int loadedContainers, int queuedContainers) {}
+                       int loadedContainers, int queuedContainers, int loadedModHandlers, int queuedModHandlers) {}
 }

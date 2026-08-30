@@ -253,9 +253,11 @@ final class LoreEvents {
         ctx.getSource().sendSuccess(() -> Component.literal("✦ DESEMPENHO NLORE ✦")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
                 .append(Component.literal(String.format(Locale.ROOT,
-                        "\nÚltima varredura: %.3f ms | maior: %.3f ms\nVarreduras lentas: %d | recipientes carregados: %d | fila: %d",
+                        "\nÚltima varredura: %.3f ms | maior: %.3f ms\nVarreduras lentas: %d"
+                                + "\nRecipientes vanilla: %d | fila: %d\nArmazenamentos de mods: %d | fila: %d",
                         result.lastNanos() / 1_000_000.0, result.maxNanos() / 1_000_000.0,
-                        result.slowScans(), result.loadedContainers(), result.queuedContainers()))
+                        result.slowScans(), result.loadedContainers(), result.queuedContainers(),
+                        result.loadedModHandlers(), result.queuedModHandlers()))
                         .withStyle(ChatFormatting.GRAY)), false);
         return 1;
     }
@@ -364,13 +366,11 @@ final class LoreEvents {
     @SubscribeEvent public void tick(ServerTickEvent.Post event) { service.tick(event.getServer()); }
     @SubscribeEvent public void chunk(ChunkEvent.Load event) {
         if (!(event.getChunk() instanceof LevelChunk chunk) || event.getLevel().getServer() == null) return;
-        chunk.getBlockEntities().values().forEach(blockEntity -> { if (blockEntity instanceof Container container) service.queue(container); });
+        chunk.getBlockEntities().values().forEach(service::queue);
     }
     @SubscribeEvent public void chunkUnload(ChunkEvent.Unload event) {
         if (!(event.getChunk() instanceof LevelChunk chunk)) return;
-        chunk.getBlockEntities().values().forEach(blockEntity -> {
-            if (blockEntity instanceof Container container) service.unload(container);
-        });
+        chunk.getBlockEntities().values().forEach(service::unload);
     }
     @SubscribeEvent public void toss(ItemTossEvent event) {
         LoreItemData.read(event.getEntity().getItem()).ifPresent(info -> {
