@@ -70,12 +70,12 @@ final class ChoiceSelectionMenu extends ChestMenu {
         control(PREVIOUS_SLOT, Items.ARROW, "← ANTERIOR", ChatFormatting.AQUA);
         control(PAGE_SLOT, Items.PAPER, "PÁGINA " + (page + 1) + "/" + pageCount(), ChatFormatting.YELLOW);
         control(SELECTED_SLOT, Items.LIME_DYE, "SELECIONADOS: " + selected.size() + "/" + required(), ChatFormatting.GREEN);
-        ItemStack confirm = new ItemStack(Items.EMERALD_BLOCK);
+        ItemStack confirm = GuiPilotIcons.confirm();
         confirm.set(DataComponents.CUSTOM_NAME, Component.literal("CONFIRMAR • " + selected.size() + "/" + required())
                 .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
         display.setItem(CONFIRM_SLOT, confirm);
         control(NEXT_SLOT, Items.ARROW, "PRÓXIMA →", ChatFormatting.AQUA);
-        ItemStack cancel = new ItemStack(Items.BARRIER);
+        ItemStack cancel = GuiPilotIcons.close();
         cancel.set(DataComponents.CUSTOM_NAME, Component.literal("FECHAR E ESCOLHER DEPOIS")
                 .withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
         display.setItem(CANCEL_SLOT, cancel);
@@ -83,7 +83,7 @@ final class ChoiceSelectionMenu extends ChestMenu {
     }
 
     private void control(int slot, net.minecraft.world.item.Item item, String name, ChatFormatting color) {
-        ItemStack stack = new ItemStack(item);
+        ItemStack stack = GuiPilotIcons.fromLegacy(item, name);
         stack.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(color, ChatFormatting.BOLD));
         display.setItem(slot, stack);
     }

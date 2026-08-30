@@ -140,7 +140,7 @@ final class KitPreviewMenu extends ChestMenu {
 
     private void tab(int slot, net.minecraft.world.item.Item item, String name, ChatFormatting color,
                      int tabMode, String description) {
-        ItemStack stack = new ItemStack(item);
+        ItemStack stack = GuiPilotIcons.fromLegacy(item, name);
         boolean active = mode == tabMode;
         stack.set(DataComponents.CUSTOM_NAME, Component.literal((active ? "✔ " : "") + name)
                 .withStyle(active ? ChatFormatting.GREEN : color, ChatFormatting.BOLD));
@@ -157,7 +157,7 @@ final class KitPreviewMenu extends ChestMenu {
                 enabled ? name : "SEM OUTRA PÁGINA", enabled ? ChatFormatting.AQUA : ChatFormatting.DARK_GRAY);
     }
     private void control(int slot, net.minecraft.world.item.Item item, String name, ChatFormatting color) {
-        ItemStack stack = new ItemStack(item);
+        ItemStack stack = GuiPilotIcons.fromLegacy(item, name);
         stack.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(color, ChatFormatting.BOLD));
         display.setItem(slot, stack);
     }
