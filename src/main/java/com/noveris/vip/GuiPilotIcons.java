@@ -33,6 +33,8 @@ final class GuiPilotIcons {
             "gui_information_pilot", new Item.Properties().stacksTo(1));
     private static final DeferredItem<Item> SELECTED = ITEMS.registerSimpleItem(
             "gui_selected_pilot", new Item.Properties().stacksTo(1));
+    private static final DeferredItem<Item> UNAVAILABLE = ITEMS.registerSimpleItem(
+            "gui_unavailable_pilot", new Item.Properties().stacksTo(1));
 
     static void register(IEventBus bus) { ITEMS.register(bus); }
 
@@ -49,6 +51,7 @@ final class GuiPilotIcons {
         if (item == Items.CHEST) return new ItemStack(CHOICES.get());
         if (item == Items.NETHER_STAR) return new ItemStack(INFORMATION.get());
         if (item == Items.LIME_DYE) return new ItemStack(SELECTED.get());
+        if (item == Items.GRAY_DYE) return new ItemStack(UNAVAILABLE.get());
         return new ItemStack(item);
     }
 
