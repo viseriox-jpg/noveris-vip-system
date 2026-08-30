@@ -60,7 +60,7 @@ final class LoreEvents {
                                                                 StringArgumentType.getString(ctx, "motivo"))))))))
                 .then(Commands.literal("revogar").requires(source -> source.hasPermission(
                                 LoreConfig.load(source.getServer()).maintenancePermission))
-                        .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("player", StringArgumentType.word()).suggests(this::suggestPlayers)
                                 .executes(this::openRevoke)
                                 .then(Commands.argument("id", StringArgumentType.word())
                                         .suggests(this::suggestSeals).executes(this::revoke))))
@@ -68,34 +68,37 @@ final class LoreEvents {
                         .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).viewPermission))
                         .then(Commands.literal("apagar").requires(source -> source.hasPermission(
                                         LoreConfig.load(source.getServer()).maintenancePermission))
-                                .then(Commands.argument("player", EntityArgument.player())
+                                .then(Commands.argument("player", StringArgumentType.word()).suggests(this::suggestPlayers)
                                         .executes(this::requestClearHistory)
                                         .then(Commands.literal("confirmar").executes(this::clearHistory))))
-                        .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("player", StringArgumentType.word()).suggests(this::suggestPlayers)
                                 .executes(ctx -> history(ctx, 1))
                                 .then(Commands.argument("pagina", IntegerArgumentType.integer(1))
                                         .executes(ctx -> history(ctx, IntegerArgumentType.getInteger(ctx, "pagina"))))))
                 .then(Commands.literal("diagnostico")
                         .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).viewPermission))
-                        .then(Commands.argument("player", EntityArgument.player()).executes(this::diagnose)))
+                        .then(Commands.argument("player", StringArgumentType.word()).suggests(this::suggestPlayers).executes(this::diagnose)))
                 .then(Commands.literal("reparar")
                         .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).maintenancePermission))
                         .then(Commands.argument("player", EntityArgument.player()).executes(this::repair)))
+                .then(Commands.literal("desempenho")
+                        .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).maintenancePermission))
+                        .executes(this::performance))
                 .then(Commands.literal("cofre")
                         .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).viewPermission))
-                        .then(Commands.argument("player", EntityArgument.player()).executes(this::vault)
+                        .then(Commands.argument("player", StringArgumentType.word()).suggests(this::suggestPlayers).executes(this::vault)
                                 .then(Commands.literal("restaurar")
                                         .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).maintenancePermission))
-                                        .then(Commands.argument("slot", IntegerArgumentType.integer(1, 54))
+                                        .then(Commands.argument("slot", IntegerArgumentType.integer(1))
                                                 .then(Commands.argument("duracao", StringArgumentType.word())
                                                         .suggests(this::suggestDurations).executes(ctx -> restore(ctx, false)))))
                                 .then(Commands.literal("manter")
                                         .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).maintenancePermission))
-                                        .then(Commands.argument("slot", IntegerArgumentType.integer(1, 54))
+                                        .then(Commands.argument("slot", IntegerArgumentType.integer(1))
                                                 .executes(ctx -> restore(ctx, true))))
                                 .then(Commands.literal("excluir")
                                         .requires(source -> source.hasPermission(LoreConfig.load(source.getServer()).maintenancePermission))
-                                        .then(Commands.argument("slot", IntegerArgumentType.integer(1, 54))
+                                        .then(Commands.argument("slot", IntegerArgumentType.integer(1))
                                                 .executes(this::deleteVault))))));
     }
 
@@ -157,8 +160,10 @@ final class LoreEvents {
     }
 
     private int revoke(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        ServerPlayer staff = ctx.getSource().getPlayerOrException(), target = EntityArgument.getPlayer(ctx, "player");
-        if (!service.revoke(staff, target, StringArgumentType.getString(ctx, "id"))) {
+        ServerPlayer staff = ctx.getSource().getPlayerOrException();
+        LoreTarget target = resolveTarget(ctx);
+        if (target == null) return 0;
+        if (!service.revoke(staff, target.id(), target.name(), StringArgumentType.getString(ctx, "id"))) {
             ctx.getSource().sendFailure(Component.literal("Nenhuma relíquia ativa corresponde a esse ID.")); return 0;
         }
         ctx.getSource().sendSuccess(() -> Component.literal("Concessão revogada.").withStyle(ChatFormatting.RED), true);
@@ -167,18 +172,21 @@ final class LoreEvents {
 
     private int openRevoke(CommandContext<CommandSourceStack> ctx)
             throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        service.openRevokeMenu(ctx.getSource().getPlayerOrException(), EntityArgument.getPlayer(ctx, "player"));
+        LoreTarget target = resolveTarget(ctx);
+        if (target == null) return 0;
+        service.openRevokeMenu(ctx.getSource().getPlayerOrException(), target.id(), target.name());
         return 1;
     }
 
     private int history(CommandContext<CommandSourceStack> ctx, int page) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        LoreTarget target = resolveTarget(ctx);
+        if (target == null) return 0;
         List<LoreStore.Entry> entries = service.data(ctx.getSource().getServer()).data.history
-                .getOrDefault(target.getUUID().toString(), List.of());
+                .getOrDefault(target.id().toString(), List.of());
         if (entries.isEmpty()) { ctx.getSource().sendFailure(Component.literal("Nenhum registro de relíquia.")); return 0; }
         int pageSize = 6, pages = (entries.size() + pageSize - 1) / pageSize;
         if (page > pages) { ctx.getSource().sendFailure(Component.literal("Página inexistente. Máximo: " + pages)); return 0; }
-        ctx.getSource().sendSuccess(() -> Component.literal("✦ HISTÓRICO DE RELÍQUIAS — " + target.getName().getString()
+        ctx.getSource().sendSuccess(() -> Component.literal("✦ HISTÓRICO DE RELÍQUIAS — " + target.name()
                         + " • " + page + "/" + pages + " ✦")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), false);
         int from = Math.max(0, entries.size() - page * pageSize);
@@ -191,11 +199,11 @@ final class LoreEvents {
         Component previous = Component.literal("[← ANTERIOR]").withStyle(style -> style
                 .withColor(page > 1 ? ChatFormatting.AQUA : ChatFormatting.DARK_GRAY).withBold(true)
                 .withClickEvent(page > 1 ? new ClickEvent(ClickEvent.Action.RUN_COMMAND,
-                        "/nlore historico " + target.getName().getString() + " " + (page - 1)) : null));
+                        "/nlore historico " + target.name() + " " + (page - 1)) : null));
         Component next = Component.literal("[PRÓXIMA →]").withStyle(style -> style
                 .withColor(page < pages ? ChatFormatting.AQUA : ChatFormatting.DARK_GRAY).withBold(true)
                 .withClickEvent(page < pages ? new ClickEvent(ClickEvent.Action.RUN_COMMAND,
-                        "/nlore historico " + target.getName().getString() + " " + (page + 1)) : null));
+                        "/nlore historico " + target.name() + " " + (page + 1)) : null));
         if (pages > 1) ctx.getSource().sendSuccess(() -> Component.empty().append(previous)
                 .append(Component.literal("   ")).append(next), false);
         return entries.size();
@@ -203,11 +211,13 @@ final class LoreEvents {
 
     private int diagnose(CommandContext<CommandSourceStack> ctx)
             throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
-        LoreService.Diagnosis result = service.diagnose(target);
+        LoreTarget target = resolveTarget(ctx);
+        if (target == null) return 0;
+        LoreService.Diagnosis result = target.online() == null
+                ? service.diagnoseOffline(ctx.getSource().getServer(), target.id()) : service.diagnose(target.online());
         long remaining = result.soonestExpiry() == 0 ? 0 : Math.max(0, result.soonestExpiry() - System.currentTimeMillis());
         int issues = result.duplicates() + result.malformed() + result.retiredCopies();
-        ctx.getSource().sendSuccess(() -> Component.literal("✦ DIAGNÓSTICO DE RELÍQUIAS — " + target.getName().getString() + " ✦")
+        ctx.getSource().sendSuccess(() -> Component.literal("✦ DIAGNÓSTICO DE RELÍQUIAS — " + target.name() + " ✦")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
                 .append(Component.literal("\nNo inventário: " + result.active() + " | localizadas no total: "
                         + result.knownActive() + " | recebidas de terceiros: " + result.transferred()
@@ -238,10 +248,23 @@ final class LoreEvents {
         return days > 0 ? days + "d " + hours + "h" : hours > 0 ? hours + "h " + minutes % 60 + "m" : minutes + "m";
     }
 
+    private int performance(CommandContext<CommandSourceStack> ctx) {
+        LoreService.Performance result = service.performance();
+        ctx.getSource().sendSuccess(() -> Component.literal("✦ DESEMPENHO NLORE ✦")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
+                .append(Component.literal(String.format(Locale.ROOT,
+                        "\nÚltima varredura: %.3f ms | maior: %.3f ms\nVarreduras lentas: %d | recipientes carregados: %d | fila: %d",
+                        result.lastNanos() / 1_000_000.0, result.maxNanos() / 1_000_000.0,
+                        result.slowScans(), result.loadedContainers(), result.queuedContainers()))
+                        .withStyle(ChatFormatting.GRAY)), false);
+        return 1;
+    }
+
     private int requestClearHistory(CommandContext<CommandSourceStack> ctx)
             throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
-        String command = "/nlore historico apagar " + target.getName().getString() + " confirmar";
+        LoreTarget target = resolveTarget(ctx);
+        if (target == null) return 0;
+        String command = "/nlore historico apagar " + target.name() + " confirmar";
         Component confirm = Component.literal("[CONFIRMAR]").withStyle(style -> style
                 .withColor(ChatFormatting.GREEN).withBold(true)
                 .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command))
@@ -253,7 +276,7 @@ final class LoreEvents {
                 .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                         Component.literal("Manter o histórico"))));
         ctx.getSource().sendSuccess(() -> Component.literal("⚠ Apagar todo o histórico de relíquias de "
-                        + target.getName().getString() + "?\n").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)
+                        + target.name() + "?\n").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)
                 .append(confirm).append(Component.literal("  ")).append(cancel), false);
         return 1;
     }
@@ -261,11 +284,12 @@ final class LoreEvents {
     private int clearHistory(CommandContext<CommandSourceStack> ctx)
             throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer staff = ctx.getSource().getPlayerOrException();
-        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        LoreTarget target = resolveTarget(ctx);
+        if (target == null) return 0;
         LoreStore store = service.data(ctx.getSource().getServer());
-        int removed = store.clearHistory(target.getUUID());
+        int removed = store.clearHistory(target.id());
         store.history(staff.getUUID(), staff.getName().getString(), "HISTORICO_APAGADO",
-                target.getName().getString() + " | " + removed + " registro(s)");
+                target.name() + " | " + removed + " registro(s)");
         store.save();
         ctx.getSource().sendSuccess(() -> Component.literal("Histórico de relíquias apagado: "
                 + removed + " registro(s).").withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD), true);
@@ -273,19 +297,27 @@ final class LoreEvents {
     }
 
     private int vault(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        service.openVault(ctx.getSource().getPlayerOrException(), EntityArgument.getPlayer(ctx, "player")); return 1;
+        LoreTarget target = resolveTarget(ctx);
+        if (target == null) return 0;
+        service.openVault(ctx.getSource().getPlayerOrException(), target.id(), target.name()); return 1;
     }
     private int restore(CommandContext<CommandSourceStack> ctx, boolean permanent) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         long duration = permanent ? 0 : duration(ctx);
         if (!permanent && duration < 0) { ctx.getSource().sendFailure(Component.literal("Duração inválida.")); return 0; }
-        LoreService.Result result = service.restore(ctx.getSource().getPlayerOrException(), EntityArgument.getPlayer(ctx, "player"),
+        LoreTarget target = resolveTarget(ctx);
+        if (target == null || target.online() == null) {
+            ctx.getSource().sendFailure(Component.literal("O jogador precisa estar online para receber o item restaurado.")); return 0;
+        }
+        LoreService.Result result = service.restore(ctx.getSource().getPlayerOrException(), target.online(),
                 IntegerArgumentType.getInteger(ctx, "slot"), duration, permanent);
         if (result != LoreService.Result.SUCCESS) { ctx.getSource().sendFailure(Component.literal("Não foi possível restaurar: " + result)); return 0; }
         ctx.getSource().sendSuccess(() -> Component.literal(permanent ? "Relíquia restaurada permanentemente."
                 : "Relíquia restaurada com novo prazo.").withStyle(ChatFormatting.GREEN), true); return 1;
     }
     private int deleteVault(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        if (!service.deleteVault(ctx.getSource().getPlayerOrException(), EntityArgument.getPlayer(ctx, "player"),
+        LoreTarget target = resolveTarget(ctx);
+        if (target == null) return 0;
+        if (!service.deleteVault(ctx.getSource().getPlayerOrException(), target.id(),
                 IntegerArgumentType.getInteger(ctx, "slot"))) { ctx.getSource().sendFailure(Component.literal("Slot inexistente.")); return 0; }
         ctx.getSource().sendSuccess(() -> Component.literal("Registro do cofre excluído.").withStyle(ChatFormatting.RED), true); return 1;
     }
@@ -301,16 +333,44 @@ final class LoreEvents {
 
     private java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestSeals(
             CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
-        try { return SharedSuggestionProvider.suggest(service.activeSeals(EntityArgument.getPlayer(ctx, "player")), builder); }
-        catch (com.mojang.brigadier.exceptions.CommandSyntaxException exception) {
-            return SharedSuggestionProvider.suggest(List.of(), builder);
-        }
+        LoreTarget target = resolveTarget(ctx, false);
+        return SharedSuggestionProvider.suggest(target == null ? List.of()
+                : service.activeSeals(ctx.getSource().getServer(), target.id()), builder);
+    }
+
+    private java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestPlayers(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        return SharedSuggestionProvider.suggest(ctx.getSource().getServer().getPlayerNames(), builder);
+    }
+
+    private LoreTarget resolveTarget(CommandContext<CommandSourceStack> ctx)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        LoreTarget target = resolveTarget(ctx, true);
+        if (target == null) ctx.getSource().sendFailure(Component.literal(
+                "Jogador desconhecido. Ele precisa ter entrado no servidor ao menos uma vez."));
+        return target;
+    }
+
+    private LoreTarget resolveTarget(CommandContext<CommandSourceStack> ctx, boolean unused) {
+        String name = StringArgumentType.getString(ctx, "player");
+        ServerPlayer online = ctx.getSource().getServer().getPlayerList().getPlayerByName(name);
+        if (online != null) return new LoreTarget(online.getUUID(), online.getName().getString(), online);
+        var cache = ctx.getSource().getServer().getProfileCache();
+        if (cache == null) return null;
+        var profile = cache.get(name).orElse(null);
+        return profile == null ? null : new LoreTarget(profile.getId(), profile.getName(), null);
     }
 
     @SubscribeEvent public void tick(ServerTickEvent.Post event) { service.tick(event.getServer()); }
     @SubscribeEvent public void chunk(ChunkEvent.Load event) {
         if (!(event.getChunk() instanceof LevelChunk chunk) || event.getLevel().getServer() == null) return;
         chunk.getBlockEntities().values().forEach(blockEntity -> { if (blockEntity instanceof Container container) service.queue(container); });
+    }
+    @SubscribeEvent public void chunkUnload(ChunkEvent.Unload event) {
+        if (!(event.getChunk() instanceof LevelChunk chunk)) return;
+        chunk.getBlockEntities().values().forEach(blockEntity -> {
+            if (blockEntity instanceof Container container) service.unload(container);
+        });
     }
     @SubscribeEvent public void toss(ItemTossEvent event) {
         LoreItemData.read(event.getEntity().getItem()).ifPresent(info -> {
@@ -320,4 +380,6 @@ final class LoreEvents {
             store.save();
         });
     }
+
+    private record LoreTarget(java.util.UUID id, String name, ServerPlayer online) {}
 }

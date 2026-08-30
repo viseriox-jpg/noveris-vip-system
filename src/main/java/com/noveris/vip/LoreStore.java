@@ -22,6 +22,7 @@ final class LoreStore {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private final Path file;
     final Data data;
+    private long lastBackupAt;
 
     private LoreStore(Path file, Data data) { this.file = file; this.data = data; }
 
@@ -37,7 +38,21 @@ final class LoreStore {
     }
 
     synchronized void save() {
-        try { Files.writeString(file, GSON.toJson(data)); }
+        try {
+            Path temp = file.resolveSibling(file.getFileName() + ".tmp");
+            Path backup = file.resolveSibling(file.getFileName() + ".bak");
+            Files.writeString(temp, GSON.toJson(data));
+            long now = System.currentTimeMillis();
+            if (Files.exists(file) && now - lastBackupAt >= 60_000L) {
+                Files.copy(file, backup, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                lastBackupAt = now;
+            }
+            try { Files.move(temp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE); }
+            catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
+                Files.move(temp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
         catch (IOException exception) { NoverisVipSystem.LOGGER.error("Falha ao salvar dados de lore", exception); }
     }
 

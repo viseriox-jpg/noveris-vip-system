@@ -26,21 +26,25 @@ final class LoreRevokeMenu extends ChestMenu {
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
             .withZone(ZoneId.of("America/Sao_Paulo"));
     private final SimpleContainer display;
+    private final Inventory inventory;
     private final LoreService service;
-    private final ServerPlayer target;
+    private final UUID targetId;
+    private final String targetName;
     private List<LoreService.ActiveRelic> relics;
     private int page;
     private UUID selected;
 
-    LoreRevokeMenu(int id, Inventory inventory, SimpleContainer display, LoreService service, ServerPlayer target) {
+    LoreRevokeMenu(int id, Inventory inventory, SimpleContainer display, LoreService service,
+                   UUID targetId, String targetName) {
         super(MenuType.GENERIC_9x6, id, inventory, display, 6);
-        this.display = display; this.service = service; this.target = target;
+        this.display = display; this.inventory = inventory; this.service = service;
+        this.targetId = targetId; this.targetName = targetName;
         rebuild();
     }
 
     private void rebuild() {
         display.clearContent();
-        relics = service.activeRelics(target);
+        relics = service.activeRelics(inventory.player.getServer(), targetId);
         int pages = Math.max(1, (relics.size() + 44) / 45);
         page = Math.min(page, pages - 1);
         int offset = page * 45;
@@ -86,7 +90,7 @@ final class LoreRevokeMenu extends ChestMenu {
         if (slotId == PREVIOUS && page > 0) { page--; rebuild(); return; }
         if (slotId == NEXT && page + 1 < pages) { page++; rebuild(); return; }
         if (slotId == CONFIRM && selected != null) {
-            boolean success = service.revoke(staff, target, selected.toString());
+            boolean success = service.revoke(staff, targetId, targetName, selected.toString());
             staff.sendSystemMessage(Component.literal(success ? "Relíquia revogada e enviada ao cofre."
                     : "A relíquia não está mais disponível.").withStyle(success ? ChatFormatting.GREEN : ChatFormatting.RED));
             selected = null; rebuild(); return;

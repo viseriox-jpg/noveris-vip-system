@@ -114,6 +114,12 @@ Ao vencer, a relíquia desaparece com mensagem, som e partículas e fica no cofr
 
 O TAB sugere os selos ativos em `/nlore revogar`. O lore mostra a data e o tempo restante, atualizado por padrão a cada minuto. Permissões, avisos (`1d,1h,10m`), frequência de atualização e duração do cofre ficam em `serverconfig/noveris_lore-server.toml`.
 
+O cofre possui páginas de 45 itens. Histórico, diagnóstico, cofre e revogação aceitam jogadores offline conhecidos pelo servidor; restauração exige que o destinatário esteja online. Os textos de concessão, aviso e recolhimento podem ser personalizados no mesmo arquivo usando `{item}` e `{tempo}`.
+
+`/nlore desempenho` mostra duração das varreduras, picos, fila e quantidade de recipientes carregados. Chunks descarregados saem do rastreamento automaticamente. O limite de alerta fica em `performance_warn_ms`.
+
+Antes de substituir `noveris_vip_system.json` e `noveris_lore.json`, o mod mantém uma cópia `.bak` atualizada no máximo uma vez por minuto. A gravação usa arquivo temporário e substituição atômica quando suportada, reduzindo o risco de corrupção em desligamentos inesperados.
+
 ## Plataforma e build
 
 - Minecraft 1.21.1

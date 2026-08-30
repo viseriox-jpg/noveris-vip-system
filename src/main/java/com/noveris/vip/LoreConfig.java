@@ -18,10 +18,18 @@ final class LoreConfig {
             "permission_maintenance = 4",
             "vault_retention_days = 7",
             "warning_times = \"1d,1h,10m\"",
-            "lore_refresh_seconds = 60"
+            "lore_refresh_seconds = 60",
+            "performance_warn_ms = 25",
+            "message_grant_title = \"✦ UMA RELÍQUIA LHE FOI CONCEDIDA ✦\"",
+            "message_grant_body = \"{item} permanecerá em suas mãos enquanto durar a vontade que a concedeu.\"",
+            "message_warning_title = \"✦ O VÍNCULO DE UMA RELÍQUIA ENFRAQUECE ✦\"",
+            "message_warning_body = \"{item} será reclamado em menos de {tempo}.\"",
+            "message_revoke_title = \"✦ A CONCESSÃO FOI REVOGADA ✦\"",
+            "message_expired_body = \"Seu tempo com esta relíquia terminou. A vontade que a concedeu agora a reclama.\""
     );
-    final int createPermission, viewPermission, maintenancePermission, vaultDays, refreshSeconds;
+    final int createPermission, viewPermission, maintenancePermission, vaultDays, refreshSeconds, performanceWarnMs;
     final long[] warningMillis;
+    final String grantTitle, grantBody, warningTitle, warningBody, revokeTitle, expiredBody;
 
     private LoreConfig(Map<String, String> values) {
         createPermission = number(values, "permission_create", 2, 0, 4);
@@ -29,8 +37,19 @@ final class LoreConfig {
         maintenancePermission = number(values, "permission_maintenance", 4, 0, 4);
         vaultDays = number(values, "vault_retention_days", 7, 1, 365);
         refreshSeconds = number(values, "lore_refresh_seconds", 60, 10, 3600);
+        performanceWarnMs = number(values, "performance_warn_ms", 25, 1, 1000);
         warningMillis = java.util.Arrays.stream(values.getOrDefault("warning_times", "1d,1h,10m").split(","))
                 .map(String::trim).mapToLong(LoreConfig::duration).filter(value -> value > 0).distinct().sorted().toArray();
+        grantTitle = text(values, "message_grant_title", "✦ UMA RELÍQUIA LHE FOI CONCEDIDA ✦");
+        grantBody = text(values, "message_grant_body", "{item} permanecerá em suas mãos enquanto durar a vontade que a concedeu.");
+        warningTitle = text(values, "message_warning_title", "✦ O VÍNCULO DE UMA RELÍQUIA ENFRAQUECE ✦");
+        warningBody = text(values, "message_warning_body", "{item} será reclamado em menos de {tempo}.");
+        revokeTitle = text(values, "message_revoke_title", "✦ A CONCESSÃO FOI REVOGADA ✦");
+        expiredBody = text(values, "message_expired_body", "Seu tempo com esta relíquia terminou. A vontade que a concedeu agora a reclama.");
+    }
+
+    private static String text(Map<String, String> values, String key, String fallback) {
+        return values.getOrDefault(key, fallback).replace("\\n", "\n");
     }
 
     static LoreConfig load(MinecraftServer server) {
