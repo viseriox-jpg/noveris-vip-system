@@ -1,0 +1,4 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": { "layer0": "noveris_vip_system:item/gui_pilot/gui_back_pilot" }
+}

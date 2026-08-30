@@ -92,7 +92,7 @@ final class KitPreviewMenu extends ChestMenu {
                 VipStore.ChoiceCategory category = store.data.choiceCategories.get(name);
                 if (category == null) continue;
                 long temporaryOptions = category.items.stream().filter(VipStore.ChoiceItem::temporary).count();
-                ItemStack icon = category.items.isEmpty() ? new ItemStack(Items.CHEST)
+                ItemStack icon = category.items.isEmpty() ? GuiPilotIcons.choices()
                         : VipStore.decode(category.items.getFirst().encodedStack(), inventory.player.registryAccess()).copy();
                 icon.setCount(1);
                 icon.set(DataComponents.CUSTOM_NAME, Component.literal(name.toUpperCase())
@@ -126,7 +126,7 @@ final class KitPreviewMenu extends ChestMenu {
         VipStore.PlanDefinition plan = store.data.plans.get(kit.plan);
         int choices = categories.stream().map(store.data.choiceCategories::get).filter(java.util.Objects::nonNull)
                 .mapToInt(category -> category.limit).sum();
-        ItemStack info = new ItemStack(Items.NETHER_STAR);
+        ItemStack info = GuiPilotIcons.information();
         info.set(DataComponents.CUSTOM_NAME, Component.literal(plan == null ? kit.plan : plan.displayName())
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
         info.set(DataComponents.LORE, new ItemLore(List.of(
