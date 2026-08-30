@@ -868,19 +868,23 @@ final class VipEvents {
 
     @SubscribeEvent public void chunkLoaded(ChunkEvent.Load event) {
         if (!(event.getChunk() instanceof LevelChunk chunk) || event.getLevel().getServer() == null) return;
-        chunk.getBlockEntities().values().forEach(blockEntity -> {
-            if (blockEntity instanceof Container container) service.queueContainer(container);
-        });
+        chunk.getBlockEntities().values().forEach(service::queueBlockEntity);
+    }
+
+    @SubscribeEvent public void chunkUnloaded(ChunkEvent.Unload event) {
+        if (!(event.getChunk() instanceof LevelChunk chunk)) return;
+        chunk.getBlockEntities().values().forEach(service::unloadBlockEntity);
     }
 
     @SubscribeEvent public void toss(ItemTossEvent event) {
+        if (!(event.getPlayer() instanceof ServerPlayer player)) return;
         VipItemData.read(event.getEntity().getItem()).ifPresent(info -> {
-            VipStore store = service.data(event.getPlayer().getServer());
-            store.addHistory(event.getPlayer().getUUID(), event.getPlayer().getName().getString(), "ITEM_DROPADO",
+            VipStore store = service.data(player.getServer());
+            store.addHistory(player.getUUID(), player.getName().getString(), "ITEM_DROPADO",
                     event.getEntity().getItem().getHoverName().getString() + " | kit: " + info.kit());
-            if (!event.getPlayer().getUUID().equals(info.originalOwner())) store.addHistory(
+            if (!player.getUUID().equals(info.originalOwner())) store.addHistory(
                     info.originalOwner(), info.originalOwnerName(), "ITEM_DROPADO_POR_TERCEIRO",
-                    event.getEntity().getItem().getHoverName().getString() + " | por: " + event.getPlayer().getName().getString());
+                    event.getEntity().getItem().getHoverName().getString() + " | por: " + player.getName().getString());
             store.save();
         });
     }

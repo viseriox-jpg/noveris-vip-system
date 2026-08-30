@@ -13,8 +13,13 @@ import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.Container;
+import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.items.IItemHandler;
 
 import java.util.HashMap;
 import java.util.List;
@@ -28,6 +33,9 @@ final class VipService {
     private final java.util.ArrayDeque<Container> containerQueue = new java.util.ArrayDeque<>();
     private final java.util.Set<Container> queuedContainers = java.util.Collections.newSetFromMap(
             new java.util.IdentityHashMap<>());
+    private final java.util.ArrayDeque<BlockEntity> blockEntityQueue = new java.util.ArrayDeque<>();
+    private final java.util.Set<BlockEntity> loadedBlockEntities = java.util.Collections.newSetFromMap(
+            new java.util.IdentityHashMap<>());
     private static final int CONTAINERS_PER_TICK = 8;
     private int ticks;
 
@@ -36,6 +44,8 @@ final class VipService {
             if (server != null && server != currentServer) {
                 containerQueue.clear();
                 queuedContainers.clear();
+                blockEntityQueue.clear();
+                loadedBlockEntities.clear();
                 lastKnownHolder.clear();
             }
             server = currentServer;
@@ -503,7 +513,7 @@ final class VipService {
             scanPlayer(current, player, now);
             sendExpiryWarnings(current, player, now);
         }
-        if (ticks % 1200 == 0) scanDroppedItems(currentServer, current, now);
+        if (ticks % 100 == 0) scanWorldItems(currentServer, current, now);
         if (ticks % 1200 == 0) {
             current.purgeVault();
             current.cleanup(VipConfig.load(currentServer));
@@ -515,13 +525,45 @@ final class VipService {
         if (queuedContainers.add(container)) containerQueue.addLast(container);
     }
 
+    void queueBlockEntity(BlockEntity blockEntity) {
+        if (blockEntity instanceof Container container) { queueContainer(container); return; }
+        if (loadedBlockEntities.add(blockEntity)) blockEntityQueue.addLast(blockEntity);
+    }
+
+    void unloadBlockEntity(BlockEntity blockEntity) {
+        if (blockEntity instanceof Container container) {
+            queuedContainers.remove(container); containerQueue.remove(container); return;
+        }
+        loadedBlockEntities.remove(blockEntity); blockEntityQueue.remove(blockEntity);
+    }
+
     private void processContainerQueue(MinecraftServer server) {
         for (int processed = 0; processed < CONTAINERS_PER_TICK && !containerQueue.isEmpty(); processed++) {
             Container container = containerQueue.removeFirst();
-            queuedContainers.remove(container);
             if (container instanceof net.minecraft.world.level.block.entity.BlockEntity blockEntity
-                    && blockEntity.isRemoved()) continue;
+                    && blockEntity.isRemoved()) { queuedContainers.remove(container); continue; }
             scanContainer(server, container);
+            if (queuedContainers.contains(container)) containerQueue.addLast(container);
+        }
+        for (int processed = 0; processed < 4 && !blockEntityQueue.isEmpty(); processed++) {
+            BlockEntity blockEntity = blockEntityQueue.removeFirst();
+            if (blockEntity.isRemoved() || blockEntity.getLevel() == null) {
+                loadedBlockEntities.remove(blockEntity); continue;
+            }
+            java.util.Set<IItemHandler> handlers = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+            IItemHandler internal = reflectiveHandler(blockEntity);
+            if (internal != null) handlers.add(internal);
+            for (Direction side : Direction.values()) {
+                IItemHandler handler = blockEntity.getLevel().getCapability(Capabilities.ItemHandler.BLOCK,
+                        blockEntity.getBlockPos(), blockEntity.getBlockState(), blockEntity, side);
+                if (handler != null) handlers.add(handler);
+            }
+            IItemHandler unsided = blockEntity.getLevel().getCapability(Capabilities.ItemHandler.BLOCK,
+                    blockEntity.getBlockPos(), blockEntity.getBlockState(), blockEntity, null);
+            if (unsided != null) handlers.add(unsided);
+            String location = storageLabel(blockEntity);
+            handlers.forEach(handler -> scanItemHandler(server, handler, location, 0));
+            if (loadedBlockEntities.contains(blockEntity)) blockEntityQueue.addLast(blockEntity);
         }
     }
 
@@ -719,23 +761,35 @@ final class VipService {
         };
     }
 
-    private void scanDroppedItems(MinecraftServer server, VipStore current, long now) {
+    private void scanWorldItems(MinecraftServer server, VipStore current, long now) {
         for (var level : server.getAllLevels()) {
             for (var entity : level.getAllEntities()) {
-                if (!(entity instanceof ItemEntity itemEntity)) continue;
-                ItemStack stack = itemEntity.getItem();
+                ItemStack stack;
+                String location;
+                if (entity instanceof ItemEntity itemEntity) {
+                    stack = itemEntity.getItem();
+                    location = "item no chão em " + level.dimension().location() + " "
+                            + itemEntity.blockPosition().toShortString();
+                } else if (entity instanceof ItemFrame frame) {
+                    stack = frame.getItem();
+                    location = "moldura em " + level.dimension().location() + " "
+                            + frame.blockPosition().toShortString();
+                } else continue;
                 VipItemData.read(stack).ifPresent(info -> {
                     if (isRetired(current, info.itemId())) {
                         alertRollback(server, current, info, stack, info.originalOwnerName(),
-                                "item no chão em " + level.dimension().location() + " "
-                                        + itemEntity.blockPosition().toShortString());
-                        itemEntity.discard();
+                                location);
+                        if (entity instanceof ItemEntity dropped) dropped.discard();
+                        else ((ItemFrame) entity).setItem(ItemStack.EMPTY);
                         current.save();
                         return;
                     }
                     if (info.expiresAt() > now) return;
                     current.archive(info.originalOwner(), info.originalOwnerName(), stack.copy(), level.registryAccess());
-                    itemEntity.discard();
+                    current.addHistory(info.originalOwner(), info.originalOwnerName(), "ITEM_RECOLHIDO",
+                            stack.getHoverName().getString() + " | " + location);
+                    if (entity instanceof ItemEntity dropped) dropped.discard();
+                    else ((ItemFrame) entity).setItem(ItemStack.EMPTY);
                     current.save();
                 });
             }
@@ -748,6 +802,7 @@ final class VipService {
         boolean changed = false;
         for (int slot = 0; slot < container.getContainerSize(); slot++) {
             ItemStack stack = container.getItem(slot);
+            scanNestedInventory(server, stack, containerLocation(container), 0);
             VipItemData.Info info = VipItemData.read(stack).orElse(null);
             if (info == null) continue;
             if (isRetired(current, info.itemId())) {
@@ -769,8 +824,64 @@ final class VipService {
         }
     }
 
+    private void scanItemHandler(MinecraftServer server, IItemHandler handler, String location, int depth) {
+        VipStore current = store(server);
+        long now = System.currentTimeMillis();
+        boolean changed = false;
+        for (int slot = 0; slot < handler.getSlots(); slot++) {
+            ItemStack stack = handler.getStackInSlot(slot);
+            scanNestedInventory(server, stack, location, depth);
+            VipItemData.Info info = VipItemData.read(stack).orElse(null);
+            if (info == null || (!isRetired(current, info.itemId()) && info.expiresAt() > now)) continue;
+            ItemStack removed = handler.extractItem(slot, stack.getCount(), false);
+            if (removed.isEmpty()) continue;
+            if (isRetired(current, info.itemId())) {
+                alertRollback(server, current, info, removed, info.originalOwnerName(), location);
+            } else {
+                current.archive(info.originalOwner(), info.originalOwnerName(), removed.copy(), server.registryAccess());
+                current.addHistory(info.originalOwner(), info.originalOwnerName(), "ITEM_RECOLHIDO",
+                        removed.getHoverName().getString() + " | " + location);
+            }
+            changed = true;
+        }
+        if (changed) current.save();
+    }
+
+    private void scanNestedInventory(MinecraftServer server, ItemStack stack, String parent, int depth) {
+        if (stack.isEmpty() || depth >= 2) return;
+        IItemHandler nested = stack.getCapability(Capabilities.ItemHandler.ITEM);
+        if (nested == null || nested.getSlots() == 0) return;
+        String type = stack.getItem().getClass().getName();
+        String location = type.startsWith("net.p3pp3rf1y.sophisticatedbackpacks")
+                ? "Sophisticated Backpack em " + parent : "inventário interno em " + parent;
+        scanItemHandler(server, nested, location, depth + 1);
+    }
+
+    private IItemHandler reflectiveHandler(BlockEntity blockEntity) {
+        if (!blockEntity.getClass().getName().startsWith("net.p3pp3rf1y.sophisticated")) return null;
+        try {
+            Object wrapper = blockEntity.getClass().getMethod("getStorageWrapper").invoke(blockEntity);
+            Object handler = wrapper.getClass().getMethod("getInventoryHandler").invoke(wrapper);
+            return handler instanceof IItemHandler itemHandler ? itemHandler : null;
+        } catch (ReflectiveOperationException | RuntimeException exception) { return null; }
+    }
+
+    private String containerLocation(Container container) {
+        return container instanceof BlockEntity blockEntity ? storageLabel(blockEntity) : "recipiente carregado";
+    }
+
+    private String storageLabel(BlockEntity blockEntity) {
+        String type = blockEntity.getClass().getName();
+        String name = type.startsWith("net.p3pp3rf1y.sophisticatedbackpacks") ? "Sophisticated Backpack"
+                : type.startsWith("net.p3pp3rf1y.sophisticatedstorage") ? "Sophisticated Storage"
+                : type.startsWith("com.tom.storagemod") ? "Tom's Storage"
+                : blockEntity.getBlockState().getBlock().getName().getString();
+        return name + " em " + blockEntity.getBlockPos().toShortString();
+    }
+
     private void scanPlayer(VipStore current, ServerPlayer player, long now) {
         for (ItemStack stack : allPlayerStacks(player)) {
+            scanNestedInventory(player.getServer(), stack, "inventário de " + player.getName().getString(), 0);
             VipItemData.read(stack).ifPresent(info -> {
                 if (isRetired(current, info.itemId())) {
                     alertRollback(player.getServer(), current, info, stack, player.getName().getString(),

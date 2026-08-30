@@ -373,10 +373,11 @@ final class LoreEvents {
         chunk.getBlockEntities().values().forEach(service::unload);
     }
     @SubscribeEvent public void toss(ItemTossEvent event) {
+        if (!(event.getPlayer() instanceof ServerPlayer player)) return;
         LoreItemData.read(event.getEntity().getItem()).ifPresent(info -> {
-            LoreStore store = service.data(event.getPlayer().getServer());
+            LoreStore store = service.data(player.getServer());
             store.history(info.owner(), info.ownerName(), "RELIQUIA_DROPADA",
-                    event.getEntity().getItem().getHoverName().getString() + " | por: " + event.getPlayer().getName().getString());
+                    event.getEntity().getItem().getHoverName().getString() + " | por: " + player.getName().getString());
             store.save();
         });
     }
