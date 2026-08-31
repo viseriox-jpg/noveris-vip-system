@@ -34,7 +34,6 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics, mouseX, mouseY, partialTick);
         super.render(graphics, mouseX, mouseY, partialTick);
-        renderControlRow(graphics);
         float opening = Math.min(1.0F, (System.currentTimeMillis() - openedAt) / 200.0F);
         if (opening < 1.0F) {
             int alpha = Math.round((1.0F - opening) * 150.0F);
@@ -90,24 +89,23 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
         graphics.renderItem(new ItemStack(Items.CHEST), buttonX + 9, buttonY + 9);
     }
 
-    private void renderControlRow(GuiGraphics graphics) {
-        for (int index = CONTROL_ROW_START; index < NoverisVaultMenu.VAULT_SIZE; index++) {
-            Slot slot = menu.getSlot(index);
-            int x = leftPos + slot.x;
-            int y = topPos + slot.y;
-            drawSlotFrame(graphics, x, y);
+    @Override
+    protected void renderSlot(GuiGraphics graphics, Slot slot) {
+        if (slot.index < CONTROL_ROW_START) {
+            super.renderSlot(graphics, slot);
+            return;
+        }
 
-            ItemStack stack = slot.getItem();
-            if (stack.isEmpty() || stack.is(Items.BLACK_STAINED_GLASS_PANE) || stack.is(Items.GRAY_DYE)) {
-                continue;
-            }
-            if (stack.is(Items.ARROW)) {
-                drawArrow(graphics, x, y, index == CONTROL_ROW_START);
-            } else if (stack.is(Items.PAPER)) {
-                drawPage(graphics, x, y);
-            } else if (stack.is(Items.BARRIER)) {
-                drawClose(graphics, x, y);
-            }
+        ItemStack stack = slot.getItem();
+        if (stack.isEmpty() || stack.is(Items.BLACK_STAINED_GLASS_PANE) || stack.is(Items.GRAY_DYE)) {
+            return;
+        }
+        if (stack.is(Items.ARROW)) {
+            drawArrow(graphics, slot.x, slot.y, slot.index == CONTROL_ROW_START);
+        } else if (stack.is(Items.PAPER)) {
+            drawPage(graphics, slot.x, slot.y);
+        } else if (stack.is(Items.BARRIER)) {
+            drawClose(graphics, slot.x, slot.y);
         }
     }
 
