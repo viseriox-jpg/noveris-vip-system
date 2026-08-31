@@ -15,7 +15,6 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
     private static final int GOLD = 0xFFE1B54F;
     private static final int MUTED = 0xFF99978F;
     private long openedAt;
-    private long transitionAt;
 
     NoverisVaultScreen(NoverisVaultMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -35,13 +34,12 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics, mouseX, mouseY, partialTick);
+        super.render(graphics, mouseX, mouseY, partialTick);
         float opening = Math.min(1.0F, (System.currentTimeMillis() - openedAt) / 200.0F);
-        float switching = Math.min(1.0F, (System.currentTimeMillis() - transitionAt) / 160.0F);
-        int offset = Math.round((1.0F - opening) * 5.0F + (1.0F - switching) * 3.0F);
-        graphics.pose().pushPose();
-        graphics.pose().translate(0, offset, 0);
-        super.render(graphics, mouseX, mouseY - offset, partialTick);
-        graphics.pose().popPose();
+        if (opening < 1.0F) {
+            int alpha = Math.round((1.0F - opening) * 150.0F);
+            graphics.fill(leftPos, topPos, leftPos + imageWidth, topPos + imageHeight, alpha << 24);
+        }
         renderTooltip(graphics, mouseX, mouseY);
     }
 
@@ -86,20 +84,12 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
     }
 
     private void renderSidebar(GuiGraphics graphics, int x, int y) {
-        ItemStack[] symbols = {
-                new ItemStack(Items.CHEST), new ItemStack(Items.CLOCK),
-                new ItemStack(Items.DIAMOND), new ItemStack(Items.BOOK)
-        };
-        for (int index = 0; index < symbols.length; index++) {
-            int buttonX = x + 7;
-            int buttonY = y + 10 + index * 43;
-            int background = index == 0 ? 0xFF302C22 : 0xFF191A1C;
-            int border = index == 0 ? 0xFF8D6A22 : 0xFF303033;
-            graphics.fill(buttonX, buttonY, buttonX + 32, buttonY + 35, border);
-            graphics.fill(buttonX + 1, buttonY + 1, buttonX + 31, buttonY + 34, background);
-            if (index == 0) graphics.fill(buttonX + 1, buttonY + 1, buttonX + 3, buttonY + 34, GOLD);
-            graphics.renderItem(symbols[index], buttonX + 9, buttonY + 9);
-        }
+        int buttonX = x + 7;
+        int buttonY = y + 10;
+        graphics.fill(buttonX, buttonY, buttonX + 32, buttonY + 35, 0xFF8D6A22);
+        graphics.fill(buttonX + 1, buttonY + 1, buttonX + 31, buttonY + 34, 0xFF302C22);
+        graphics.fill(buttonX + 1, buttonY + 1, buttonX + 3, buttonY + 34, GOLD);
+        graphics.renderItem(new ItemStack(Items.CHEST), buttonX + 9, buttonY + 9);
     }
 
     @Override
@@ -111,11 +101,5 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
                 NoverisVaultMenu.VAULT_X, 18, MUTED, false);
         graphics.drawString(font, Component.literal("INVENTÁRIO"),
                 NoverisVaultMenu.INVENTORY_X, inventoryLabelY, MUTED, false);
-    }
-
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0) transitionAt = System.currentTimeMillis();
-        return super.mouseClicked(mouseX, mouseY, button);
     }
 }
