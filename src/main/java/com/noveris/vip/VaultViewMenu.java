@@ -7,8 +7,6 @@ import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemLore;
@@ -19,7 +17,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
-final class VaultViewMenu extends ChestMenu {
+final class VaultViewMenu extends NoverisVaultMenu {
     private static final int PREVIOUS = 45, PAGE = 46, NEXT = 52, CLOSE = 53;
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
             .withZone(ZoneId.of("America/Sao_Paulo"));
@@ -29,7 +27,7 @@ final class VaultViewMenu extends ChestMenu {
     private int page;
 
     VaultViewMenu(int id, Inventory inventory, SimpleContainer display, List<VipStore.VaultEntry> entries) {
-        super(MenuType.GENERIC_9x6, id, inventory, display, 6);
+        super(id, inventory, display);
         this.display = display;
         this.inventory = inventory;
         this.entries = entries;

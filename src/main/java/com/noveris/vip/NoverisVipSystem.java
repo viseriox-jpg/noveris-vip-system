@@ -11,6 +11,7 @@ public final class NoverisVipSystem {
     public static final String MOD_ID = "noveris_vip_system";
     static final Logger LOGGER = LogUtils.getLogger();
     public NoverisVipSystem(IEventBus modEventBus) {
+        ModMenus.register(modEventBus);
         NeoForge.EVENT_BUS.register(new VipEvents());
         NeoForge.EVENT_BUS.register(new LoreEvents());
     }

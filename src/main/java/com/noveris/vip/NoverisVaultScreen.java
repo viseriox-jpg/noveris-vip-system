@@ -1,0 +1,119 @@
+package com.noveris.vip;
+
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+
+final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu> {
+    private static final int PANEL_WIDTH = 236;
+    private static final int PANEL_HEIGHT = 238;
+    private static final int SIDEBAR_WIDTH = 46;
+    private static final int GOLD = 0xFFE1B54F;
+    private static final int MUTED = 0xFF99978F;
+    private long openedAt;
+    private long transitionAt;
+
+    NoverisVaultScreen(NoverisVaultMenu menu, Inventory inventory, Component title) {
+        super(menu, inventory, title);
+        imageWidth = PANEL_WIDTH;
+        imageHeight = PANEL_HEIGHT;
+        inventoryLabelY = 139;
+        titleLabelX = NoverisVaultMenu.VAULT_X;
+        titleLabelY = 10;
+    }
+
+    @Override
+    protected void init() {
+        super.init();
+        openedAt = System.currentTimeMillis();
+    }
+
+    @Override
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        renderBackground(graphics, mouseX, mouseY, partialTick);
+        float opening = Math.min(1.0F, (System.currentTimeMillis() - openedAt) / 200.0F);
+        float switching = Math.min(1.0F, (System.currentTimeMillis() - transitionAt) / 160.0F);
+        int offset = Math.round((1.0F - opening) * 5.0F + (1.0F - switching) * 3.0F);
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, offset, 0);
+        super.render(graphics, mouseX, mouseY - offset, partialTick);
+        graphics.pose().popPose();
+        renderTooltip(graphics, mouseX, mouseY);
+    }
+
+    @Override
+    protected void renderBg(GuiGraphics graphics, float partialTick, int mouseX, int mouseY) {
+        int x = leftPos;
+        int y = topPos;
+        graphics.fill(x, y, x + imageWidth, y + imageHeight, 0xFF111214);
+        graphics.fill(x + 2, y + 2, x + imageWidth - 2, y + imageHeight - 2, 0xFF1B1C1E);
+        graphics.fill(x + SIDEBAR_WIDTH, y + 2, x + SIDEBAR_WIDTH + 1, y + imageHeight - 2, 0xFF4A463B);
+        graphics.fill(x + 3, y + 3, x + SIDEBAR_WIDTH, y + imageHeight - 3, 0xFF17181A);
+        drawMetalTexture(graphics, x + SIDEBAR_WIDTH + 1, y + 3, imageWidth - SIDEBAR_WIDTH - 4, imageHeight - 6);
+        graphics.fill(x + NoverisVaultMenu.VAULT_X - 3, y + 23,
+                x + imageWidth - 9, y + 24, 0xFF4B4435);
+
+        renderSidebar(graphics, x, y);
+        for (Slot slot : menu.slots) {
+            drawSlotFrame(graphics, x + slot.x, y + slot.y);
+        }
+        graphics.fill(x + NoverisVaultMenu.INVENTORY_X - 4, y + 143,
+                x + imageWidth - 8, y + 145, 0xFF343333);
+    }
+
+    private void drawMetalTexture(GuiGraphics graphics, int x, int y, int width, int height) {
+        graphics.fill(x, y, x + width, y + height, 0xFF202123);
+        for (int line = 0; line < height; line += 17) {
+            int shade = (line / 17) % 2 == 0 ? 0xFF232426 : 0xFF1D1E20;
+            graphics.fill(x + 1, y + line, x + width - 1, y + line + 1, shade);
+        }
+        for (int column = 12; column < width; column += 37) {
+            graphics.fill(x + column, y + 1, x + column + 1, y + height - 1, 0xFF1A1B1C);
+        }
+    }
+
+    private void drawSlotFrame(GuiGraphics graphics, int x, int y) {
+        graphics.fill(x - 1, y - 1, x + 17, y + 17, 0xFF3B3B3D);
+        graphics.fill(x, y, x + 16, y + 16, 0xFF0E0F10);
+        graphics.fill(x + 1, y + 1, x + 16, y + 2, 0xFF080808);
+        graphics.fill(x + 1, y + 2, x + 2, y + 16, 0xFF080808);
+        graphics.fill(x + 15, y + 2, x + 16, y + 16, 0xFF262729);
+        graphics.fill(x + 2, y + 15, x + 16, y + 16, 0xFF262729);
+    }
+
+    private void renderSidebar(GuiGraphics graphics, int x, int y) {
+        ItemStack[] symbols = {
+                new ItemStack(Items.CHEST), new ItemStack(Items.CLOCK),
+                new ItemStack(Items.DIAMOND), new ItemStack(Items.BOOK)
+        };
+        for (int index = 0; index < symbols.length; index++) {
+            int buttonX = x + 7;
+            int buttonY = y + 10 + index * 43;
+            int background = index == 0 ? 0xFF302C22 : 0xFF191A1C;
+            int border = index == 0 ? 0xFF8D6A22 : 0xFF303033;
+            graphics.fill(buttonX, buttonY, buttonX + 32, buttonY + 35, border);
+            graphics.fill(buttonX + 1, buttonY + 1, buttonX + 31, buttonY + 34, background);
+            if (index == 0) graphics.fill(buttonX + 1, buttonY + 1, buttonX + 3, buttonY + 34, GOLD);
+            graphics.renderItem(symbols[index], buttonX + 9, buttonY + 9);
+        }
+    }
+
+    @Override
+    protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
+        graphics.drawString(font, title, titleLabelX, titleLabelY, GOLD, false);
+        graphics.drawString(font, Component.literal("ITENS SOB CUSTÓDIA"),
+                NoverisVaultMenu.VAULT_X, 18, MUTED, false);
+        graphics.drawString(font, Component.literal("INVENTÁRIO"),
+                NoverisVaultMenu.INVENTORY_X, inventoryLabelY, MUTED, false);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0) transitionAt = System.currentTimeMillis();
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+}

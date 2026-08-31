@@ -6,9 +6,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ClickType;
-import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemLore;
@@ -16,7 +14,7 @@ import net.minecraft.world.item.component.ItemLore;
 import java.util.ArrayList;
 import java.util.List;
 
-final class LoreVaultMenu extends ChestMenu {
+final class LoreVaultMenu extends NoverisVaultMenu {
     private static final int PREVIOUS = 45, PAGE = 46, NEXT = 52, CLOSE = 53;
     private final SimpleContainer display;
     private final Inventory inventory;
@@ -24,7 +22,7 @@ final class LoreVaultMenu extends ChestMenu {
     private int page;
 
     LoreVaultMenu(int id, Inventory inventory, SimpleContainer display, List<LoreStore.VaultEntry> entries) {
-        super(MenuType.GENERIC_9x6, id, inventory, display, 6);
+        super(id, inventory, display);
         this.inventory = inventory; this.display = display; this.entries = entries;
         rebuild();
     }
