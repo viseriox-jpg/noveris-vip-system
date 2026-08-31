@@ -6,23 +6,21 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
-
-import java.util.Locale;
+import net.minecraft.world.item.Items;
 
 final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu> {
-    private static final int PANEL_WIDTH = 192;
-    private static final int PANEL_HEIGHT = 157;
-    private static final int VIP_GOLD = 0xFFE1B54F;
-    private static final int LORE_GOLD = 0xFFC88745;
+    private static final int PANEL_WIDTH = 236;
+    private static final int PANEL_HEIGHT = 238;
+    private static final int SIDEBAR_WIDTH = 46;
+    private static final int GOLD = 0xFFE1B54F;
     private static final int MUTED = 0xFF99978F;
-    private final boolean loreVault;
     private long openedAt;
 
     NoverisVaultScreen(NoverisVaultMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
-        loreVault = title.getString().toLowerCase(Locale.ROOT).contains("relíquia");
         imageWidth = PANEL_WIDTH;
         imageHeight = PANEL_HEIGHT;
+        inventoryLabelY = 139;
         titleLabelX = NoverisVaultMenu.VAULT_X;
         titleLabelY = 7;
     }
@@ -51,73 +49,57 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
         int y = topPos;
         graphics.fill(x, y, x + imageWidth, y + imageHeight, 0xFF111214);
         graphics.fill(x + 2, y + 2, x + imageWidth - 2, y + imageHeight - 2, 0xFF1B1C1E);
-        drawMetalTexture(graphics, x + 3, y + 3, imageWidth - 6, imageHeight - 6);
-        graphics.fill(x + NoverisVaultMenu.VAULT_X - 2, y + 30,
-                x + imageWidth - 14, y + 31, loreVault ? 0xFF5D332B : 0xFF4B4435);
-        graphics.fill(x + NoverisVaultMenu.VAULT_X - 2, y + 127,
-                x + imageWidth - 14, y + 128, 0xFF343333);
+        graphics.fill(x + SIDEBAR_WIDTH, y + 2, x + SIDEBAR_WIDTH + 1, y + imageHeight - 2, 0xFF4A463B);
+        graphics.fill(x + 3, y + 3, x + SIDEBAR_WIDTH, y + imageHeight - 3, 0xFF17181A);
+        drawMetalTexture(graphics, x + SIDEBAR_WIDTH + 1, y + 3, imageWidth - SIDEBAR_WIDTH - 4, imageHeight - 6);
+        graphics.fill(x + NoverisVaultMenu.VAULT_X - 3, y + 23,
+                x + imageWidth - 9, y + 24, 0xFF4B4435);
 
-        boolean empty = isEmpty();
-        for (int slotIndex = 0; slotIndex < menu.slots.size(); slotIndex++) {
-            Slot slot = menu.slots.get(slotIndex);
-            if (empty && slotIndex < 45) continue;
-            if (slot.x < 0) continue;
-            boolean hovered = mouseX >= x + slot.x - 1 && mouseX < x + slot.x + 17
-                    && mouseY >= y + slot.y - 1 && mouseY < y + slot.y + 17;
-            drawSlotFrame(graphics, x + slot.x, y + slot.y, hovered);
+        renderSidebar(graphics, x, y);
+        for (Slot slot : menu.slots) {
+            drawSlotFrame(graphics, x + slot.x, y + slot.y);
         }
+        graphics.fill(x + NoverisVaultMenu.INVENTORY_X - 4, y + 143,
+                x + imageWidth - 8, y + 145, 0xFF343333);
     }
 
     private void drawMetalTexture(GuiGraphics graphics, int x, int y, int width, int height) {
-        graphics.fill(x, y, x + width, y + height, loreVault ? 0xFF211D1D : 0xFF202123);
-        for (int index = 0; index < 38; index++) {
-            int dotX = x + 3 + (index * 47) % Math.max(4, width - 6);
-            int dotY = y + 3 + (index * 29) % Math.max(4, height - 6);
-            int shade = index % 3 == 0 ? 0xFF28282A : 0xFF1B1C1E;
-            graphics.fill(dotX, dotY, dotX + (index % 4 == 0 ? 2 : 1), dotY + 1, shade);
+        graphics.fill(x, y, x + width, y + height, 0xFF202123);
+        for (int line = 0; line < height; line += 17) {
+            int shade = (line / 17) % 2 == 0 ? 0xFF232426 : 0xFF1D1E20;
+            graphics.fill(x + 1, y + line, x + width - 1, y + line + 1, shade);
+        }
+        for (int column = 12; column < width; column += 37) {
+            graphics.fill(x + column, y + 1, x + column + 1, y + height - 1, 0xFF1A1B1C);
         }
     }
 
-    private void drawSlotFrame(GuiGraphics graphics, int x, int y, boolean hovered) {
-        int border = hovered ? accent() : 0xFF353537;
-        graphics.fill(x - 1, y - 1, x + 17, y + 17, border);
-        graphics.fill(x, y, x + 16, y + 16, 0xFF0C0D0E);
-        graphics.fill(x + 1, y + 1, x + 15, y + 2, 0xFF161719);
-        graphics.fill(x + 1, y + 2, x + 2, y + 15, 0xFF161719);
+    private void drawSlotFrame(GuiGraphics graphics, int x, int y) {
+        graphics.fill(x - 1, y - 1, x + 17, y + 17, 0xFF3B3B3D);
+        graphics.fill(x, y, x + 16, y + 16, 0xFF0E0F10);
+        graphics.fill(x + 1, y + 1, x + 16, y + 2, 0xFF080808);
+        graphics.fill(x + 1, y + 2, x + 2, y + 16, 0xFF080808);
+        graphics.fill(x + 15, y + 2, x + 16, y + 16, 0xFF262729);
+        graphics.fill(x + 2, y + 15, x + 16, y + 16, 0xFF262729);
+    }
+
+    private void renderSidebar(GuiGraphics graphics, int x, int y) {
+        int buttonX = x + 7;
+        int buttonY = y + 10;
+        graphics.fill(buttonX, buttonY, buttonX + 32, buttonY + 35, 0xFF8D6A22);
+        graphics.fill(buttonX + 1, buttonY + 1, buttonX + 31, buttonY + 34, 0xFF302C22);
+        graphics.fill(buttonX + 1, buttonY + 1, buttonX + 3, buttonY + 34, GOLD);
+        graphics.renderItem(new ItemStack(Items.CHEST), buttonX + 9, buttonY + 9);
     }
 
     @Override
     protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
-        int titleWidth = 146;
+        int titleWidth = imageWidth - titleLabelX - 10;
         String fittedTitle = font.plainSubstrByWidth(title.getString(), titleWidth);
-        graphics.drawString(font, fittedTitle, titleLabelX, titleLabelY, accent(), false);
-        graphics.drawString(font, Component.literal(loreVault ? "RELÍQUIAS SOB CUSTÓDIA" : "ITENS SOB CUSTÓDIA"),
-                NoverisVaultMenu.VAULT_X, 20, MUTED, false);
-
-        if (isEmpty()) {
-            String empty = loreVault ? "Nenhuma relíquia repousa sob custódia."
-                    : "Nenhum item repousa sob custódia.";
-            int maxWidth = imageWidth - 28;
-            String fitted = font.plainSubstrByWidth(empty, maxWidth);
-            graphics.drawString(font, fitted, (imageWidth - font.width(fitted)) / 2, 78, MUTED, false);
-        }
-
-        String page = pageText();
-        graphics.drawString(font, page, (imageWidth - font.width(page)) / 2,
-                NoverisVaultMenu.FOOTER_Y + 4, MUTED, false);
-    }
-
-    private boolean isEmpty() {
-        for (int slot = 0; slot < 45; slot++) if (menu.getSlot(slot).hasItem()) return false;
-        return true;
-    }
-
-    private String pageText() {
-        ItemStack page = menu.getSlot(46).getItem();
-        return page.isEmpty() ? "PÁGINA 1/1 • 0 ITENS" : page.getHoverName().getString();
-    }
-
-    private int accent() {
-        return loreVault ? LORE_GOLD : VIP_GOLD;
+        graphics.drawString(font, fittedTitle, titleLabelX, titleLabelY, GOLD, false);
+        graphics.drawString(font, Component.literal("ITENS SOB CUSTÓDIA"),
+                NoverisVaultMenu.VAULT_X, 18, MUTED, false);
+        graphics.drawString(font, Component.literal("INVENTÁRIO"),
+                NoverisVaultMenu.INVENTORY_X, inventoryLabelY, MUTED, false);
     }
 }

@@ -10,9 +10,11 @@ import net.minecraft.world.item.ItemStack;
 
 class NoverisVaultMenu extends AbstractContainerMenu {
     static final int VAULT_SIZE = 54;
-    static final int VAULT_X = 15;
-    static final int VAULT_Y = 35;
-    static final int FOOTER_Y = 134;
+    static final int VAULT_X = 58;
+    static final int VAULT_Y = 28;
+    static final int INVENTORY_X = 58;
+    static final int INVENTORY_Y = 151;
+    static final int HOTBAR_Y = 211;
 
     private final Container vault;
 
@@ -26,21 +28,21 @@ class NoverisVaultMenu extends AbstractContainerMenu {
         this.vault = vault;
         vault.startOpen(playerInventory.player);
 
-        for (int row = 0; row < 5; row++) {
+        for (int row = 0; row < 6; row++) {
             for (int column = 0; column < 9; column++) {
                 addSlot(new Slot(vault, column + row * 9,
                         VAULT_X + column * 18, VAULT_Y + row * 18));
             }
         }
-        for (int slot = 45; slot < VAULT_SIZE; slot++) {
-            int x = switch (slot) {
-                case 45 -> VAULT_X;
-                case 52 -> VAULT_X + 8 * 18;
-                case 53 -> 167;
-                default -> -1000;
-            };
-            int y = slot == 53 ? 7 : FOOTER_Y;
-            addSlot(new Slot(vault, slot, x, y));
+        for (int row = 0; row < 3; row++) {
+            for (int column = 0; column < 9; column++) {
+                addSlot(new Slot(playerInventory, column + row * 9 + 9,
+                        INVENTORY_X + column * 18, INVENTORY_Y + row * 18));
+            }
+        }
+        for (int column = 0; column < 9; column++) {
+            addSlot(new Slot(playerInventory, column,
+                    INVENTORY_X + column * 18, HOTBAR_Y));
         }
     }
 
