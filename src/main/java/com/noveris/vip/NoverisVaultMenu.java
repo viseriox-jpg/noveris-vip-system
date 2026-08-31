@@ -10,8 +10,9 @@ import net.minecraft.world.item.ItemStack;
 
 class NoverisVaultMenu extends AbstractContainerMenu {
     static final int VAULT_SIZE = 54;
-    static final int VAULT_X = 58;
-    static final int VAULT_Y = 28;
+    static final int VAULT_X = 59;
+    static final int VAULT_Y = 49;
+    static final int SLOT_STEP = 23;
 
     private final Container vault;
 
@@ -25,12 +26,14 @@ class NoverisVaultMenu extends AbstractContainerMenu {
         this.vault = vault;
         vault.startOpen(playerInventory.player);
 
-        for (int row = 0; row < 6; row++) {
+        for (int row = 0; row < 5; row++) {
             for (int column = 0; column < 9; column++) {
                 addSlot(new Slot(vault, column + row * 9,
-                        VAULT_X + column * 18, VAULT_Y + row * 18));
+                        VAULT_X + column * SLOT_STEP, VAULT_Y + row * SLOT_STEP));
             }
         }
+        for (int slot = 45; slot < VAULT_SIZE; slot++)
+            addSlot(new Slot(vault, slot, -1000, -1000));
     }
 
     @Override
