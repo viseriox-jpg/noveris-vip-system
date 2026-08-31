@@ -23,7 +23,7 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
         imageHeight = PANEL_HEIGHT;
         inventoryLabelY = 139;
         titleLabelX = NoverisVaultMenu.VAULT_X;
-        titleLabelY = 10;
+        titleLabelY = 7;
     }
 
     @Override
@@ -104,7 +104,9 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
 
     @Override
     protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
-        graphics.drawString(font, title, titleLabelX, titleLabelY, GOLD, false);
+        int titleWidth = imageWidth - titleLabelX - 10;
+        String fittedTitle = font.plainSubstrByWidth(title.getString(), titleWidth);
+        graphics.drawString(font, fittedTitle, titleLabelX, titleLabelY, GOLD, false);
         graphics.drawString(font, Component.literal("ITENS SOB CUSTÓDIA"),
                 NoverisVaultMenu.VAULT_X, 18, MUTED, false);
         graphics.drawString(font, Component.literal("INVENTÁRIO"),
