@@ -12,9 +12,6 @@ class NoverisVaultMenu extends AbstractContainerMenu {
     static final int VAULT_SIZE = 54;
     static final int VAULT_X = 58;
     static final int VAULT_Y = 28;
-    static final int INVENTORY_X = 58;
-    static final int INVENTORY_Y = 151;
-    static final int HOTBAR_Y = 211;
 
     private final Container vault;
 
@@ -33,16 +30,6 @@ class NoverisVaultMenu extends AbstractContainerMenu {
                 addSlot(new Slot(vault, column + row * 9,
                         VAULT_X + column * 18, VAULT_Y + row * 18));
             }
-        }
-        for (int row = 0; row < 3; row++) {
-            for (int column = 0; column < 9; column++) {
-                addSlot(new Slot(playerInventory, column + row * 9 + 9,
-                        INVENTORY_X + column * 18, INVENTORY_Y + row * 18));
-            }
-        }
-        for (int column = 0; column < 9; column++) {
-            addSlot(new Slot(playerInventory, column,
-                    INVENTORY_X + column * 18, HOTBAR_Y));
         }
     }
 

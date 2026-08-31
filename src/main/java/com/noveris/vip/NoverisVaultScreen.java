@@ -10,17 +10,16 @@ import net.minecraft.world.item.Items;
 
 final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu> {
     private static final int PANEL_WIDTH = 236;
-    private static final int PANEL_HEIGHT = 238;
+    private static final int PANEL_HEIGHT = 148;
     private static final int SIDEBAR_WIDTH = 46;
     private static final int GOLD = 0xFFE1B54F;
-    private static final int MUTED = 0xFF99978F;
+    private static final int CONTROL_ROW_START = 45;
     private long openedAt;
 
     NoverisVaultScreen(NoverisVaultMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
         imageWidth = PANEL_WIDTH;
         imageHeight = PANEL_HEIGHT;
-        inventoryLabelY = 139;
         titleLabelX = NoverisVaultMenu.VAULT_X;
         titleLabelY = 7;
     }
@@ -35,6 +34,7 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics, mouseX, mouseY, partialTick);
         super.render(graphics, mouseX, mouseY, partialTick);
+        renderControlRow(graphics);
         float opening = Math.min(1.0F, (System.currentTimeMillis() - openedAt) / 200.0F);
         if (opening < 1.0F) {
             int alpha = Math.round((1.0F - opening) * 150.0F);
@@ -52,15 +52,13 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
         graphics.fill(x + SIDEBAR_WIDTH, y + 2, x + SIDEBAR_WIDTH + 1, y + imageHeight - 2, 0xFF4A463B);
         graphics.fill(x + 3, y + 3, x + SIDEBAR_WIDTH, y + imageHeight - 3, 0xFF17181A);
         drawMetalTexture(graphics, x + SIDEBAR_WIDTH + 1, y + 3, imageWidth - SIDEBAR_WIDTH - 4, imageHeight - 6);
-        graphics.fill(x + NoverisVaultMenu.VAULT_X - 3, y + 23,
-                x + imageWidth - 9, y + 24, 0xFF4B4435);
+        graphics.fill(x + NoverisVaultMenu.VAULT_X - 3, y + 22,
+                x + imageWidth - 9, y + 23, 0xFF302E2A);
 
         renderSidebar(graphics, x, y);
         for (Slot slot : menu.slots) {
             drawSlotFrame(graphics, x + slot.x, y + slot.y);
         }
-        graphics.fill(x + NoverisVaultMenu.INVENTORY_X - 4, y + 143,
-                x + imageWidth - 8, y + 145, 0xFF343333);
     }
 
     private void drawMetalTexture(GuiGraphics graphics, int x, int y, int width, int height) {
@@ -92,14 +90,59 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
         graphics.renderItem(new ItemStack(Items.CHEST), buttonX + 9, buttonY + 9);
     }
 
+    private void renderControlRow(GuiGraphics graphics) {
+        for (int index = CONTROL_ROW_START; index < NoverisVaultMenu.VAULT_SIZE; index++) {
+            Slot slot = menu.getSlot(index);
+            int x = leftPos + slot.x;
+            int y = topPos + slot.y;
+            drawSlotFrame(graphics, x, y);
+
+            ItemStack stack = slot.getItem();
+            if (stack.isEmpty() || stack.is(Items.BLACK_STAINED_GLASS_PANE) || stack.is(Items.GRAY_DYE)) {
+                continue;
+            }
+            if (stack.is(Items.ARROW)) {
+                drawArrow(graphics, x, y, index == CONTROL_ROW_START);
+            } else if (stack.is(Items.PAPER)) {
+                drawPage(graphics, x, y);
+            } else if (stack.is(Items.BARRIER)) {
+                drawClose(graphics, x, y);
+            }
+        }
+    }
+
+    private void drawArrow(GuiGraphics graphics, int x, int y, boolean left) {
+        int color = 0xFF777A7E;
+        int shadow = 0xFF303234;
+        int center = x + 8;
+        graphics.fill(x + 4, y + 7, x + 12, y + 10, shadow);
+        graphics.fill(x + 5, y + 6, x + 12, y + 9, color);
+        for (int row = 0; row < 3; row++) {
+            int px = left ? center - row - 3 : center + row + 1;
+            graphics.fill(px, y + 5 - row, px + 2, y + 11 + row, shadow);
+            graphics.fill(px, y + 4 - row, px + 1, y + 10 + row, color);
+        }
+    }
+
+    private void drawPage(GuiGraphics graphics, int x, int y) {
+        graphics.fill(x + 4, y + 3, x + 12, y + 14, 0xFF313235);
+        graphics.fill(x + 5, y + 3, x + 13, y + 13, 0xFF77746C);
+        graphics.fill(x + 7, y + 6, x + 11, y + 7, 0xFF292A2C);
+        graphics.fill(x + 7, y + 9, x + 11, y + 10, 0xFF292A2C);
+    }
+
+    private void drawClose(GuiGraphics graphics, int x, int y) {
+        graphics.fill(x + 3, y + 3, x + 13, y + 13, 0xFF3A1717);
+        for (int offset = 0; offset < 3; offset++) {
+            graphics.fill(x + 4 + offset, y + 4 + offset, x + 6 + offset, y + 6 + offset, 0xFF9D3434);
+            graphics.fill(x + 10 - offset, y + 4 + offset, x + 12 - offset, y + 6 + offset, 0xFF9D3434);
+        }
+    }
+
     @Override
     protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
         int titleWidth = imageWidth - titleLabelX - 10;
         String fittedTitle = font.plainSubstrByWidth(title.getString(), titleWidth);
         graphics.drawString(font, fittedTitle, titleLabelX, titleLabelY, GOLD, false);
-        graphics.drawString(font, Component.literal("ITENS SOB CUSTÓDIA"),
-                NoverisVaultMenu.VAULT_X, 18, MUTED, false);
-        graphics.drawString(font, Component.literal("INVENTÁRIO"),
-                NoverisVaultMenu.INVENTORY_X, inventoryLabelY, MUTED, false);
     }
 }
