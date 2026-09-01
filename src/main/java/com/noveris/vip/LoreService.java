@@ -530,8 +530,9 @@ final class LoreService {
         List<LoreStore.VaultEntry> entries = store(staff.getServer()).data.vault
                 .getOrDefault(targetId.toString(), List.of());
         SimpleContainer inventory = new SimpleContainer(54);
-        staff.openMenu(new SimpleMenuProvider((id, inv, ignored) -> new LoreVaultMenu(id, inv, inventory, entries),
-                Component.literal("Cofre de relíquias — " + targetName)));
+        staff.openMenu(new SimpleMenuProvider((id, inv, ignored) ->
+                new LoreVaultMenu(id, inv, inventory, entries, targetId, targetName),
+                Component.literal("COFRE DE RELÍQUIAS — " + targetName + " | " + entries.size() + " itens")));
     }
 
     Result restore(ServerPlayer staff, ServerPlayer target, int slot, long duration, boolean permanent) {

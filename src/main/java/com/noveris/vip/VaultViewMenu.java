@@ -16,21 +16,27 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 final class VaultViewMenu extends NoverisVaultMenu {
-    private static final int PREVIOUS = 45, PAGE = 46, NEXT = 52, CLOSE = 53;
+    private static final int PREVIOUS = 45, PAGE = 46, TAB_VIP = 47, TAB_LORE = 48, NEXT = 52, CLOSE = 53;
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
             .withZone(ZoneId.of("America/Sao_Paulo"));
     private final SimpleContainer display;
     private final Inventory inventory;
     private final List<VipStore.VaultEntry> entries;
+    private final UUID targetId;
+    private final String targetName;
     private int page;
 
-    VaultViewMenu(int id, Inventory inventory, SimpleContainer display, List<VipStore.VaultEntry> entries) {
+    VaultViewMenu(int id, Inventory inventory, SimpleContainer display, List<VipStore.VaultEntry> entries,
+                  UUID targetId, String targetName) {
         super(id, inventory, display);
         this.display = display;
         this.inventory = inventory;
         this.entries = entries;
+        this.targetId = targetId;
+        this.targetName = targetName;
         rebuild();
     }
 
@@ -61,6 +67,8 @@ final class VaultViewMenu extends NoverisVaultMenu {
                 page > 0 ? "← ANTERIOR" : "SEM PÁGINA ANTERIOR", ChatFormatting.AQUA);
         control(PAGE, Items.PAPER, "PÁGINA " + (page + 1) + "/" + pages()
                 + " • " + entries.size() + " itens", ChatFormatting.YELLOW);
+        control(TAB_VIP, Items.GOLD_BLOCK, "COFRE VIP", ChatFormatting.GOLD);
+        control(TAB_LORE, Items.AMETHYST_SHARD, "COFRE DE RELÍQUIAS", ChatFormatting.LIGHT_PURPLE);
         control(NEXT, page + 1 < pages() ? Items.ARROW : Items.GRAY_DYE,
                 page + 1 < pages() ? "PRÓXIMA →" : "SEM PRÓXIMA PÁGINA", ChatFormatting.AQUA);
         control(CLOSE, Items.BARRIER, "FECHAR", ChatFormatting.RED);
@@ -76,6 +84,12 @@ final class VaultViewMenu extends NoverisVaultMenu {
     @Override public void clicked(int slotId, int button, ClickType clickType, Player player) {
         if (slotId == PREVIOUS && page > 0) { page--; rebuild(); return; }
         if (slotId == NEXT && page + 1 < pages()) { page++; rebuild(); return; }
+        if (slotId == TAB_LORE && player instanceof net.minecraft.server.level.ServerPlayer staff
+                && staff.createCommandSourceStack().hasPermission(
+                LoreConfig.load(staff.getServer()).viewPermission)) {
+            new LoreService().openVault(staff, targetId, targetName);
+            return;
+        }
         if (slotId == CLOSE) { player.closeContainer(); return; }
         if (slotId >= 0 && slotId < 54) return;
         super.clicked(slotId, button, clickType, player);

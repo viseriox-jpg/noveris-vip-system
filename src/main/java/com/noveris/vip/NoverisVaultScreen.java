@@ -6,12 +6,11 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu> {
-    private static final int PANEL_WIDTH = 286, PANEL_HEIGHT = 188, SIDEBAR_WIDTH = 43;
-    private static final int PREVIOUS = 45, PAGE = 46, NEXT = 52, CLOSE = 53;
+    private static final int PANEL_WIDTH = 286, PANEL_HEIGHT = 210, SIDEBAR_WIDTH = 43;
+    private static final int PREVIOUS = 45, PAGE = 46, TAB_VIP = 47, TAB_LORE = 48, NEXT = 52, CLOSE = 53;
     private static final int GOLD = 0xFFE0AD3C, TEXT = 0xFFC9C5B9, MUTED = 0xFF85837C;
     private long openedAt;
 
@@ -46,12 +45,13 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
         graphics.fill(x, y, x + PANEL_WIDTH, y + PANEL_HEIGHT, 0xFF0D0E0F);
         graphics.fill(x + 1, y + 1, x + PANEL_WIDTH - 1, y + PANEL_HEIGHT - 1, 0xFF38393A);
         graphics.fill(x + 2, y + 2, x + PANEL_WIDTH - 2, y + PANEL_HEIGHT - 2, 0xFF191A1C);
-        drawMetalTexture(graphics, x + SIDEBAR_WIDTH, y + 3,
-                PANEL_WIDTH - SIDEBAR_WIDTH - 3, PANEL_HEIGHT - 6);
+        graphics.fill(x + SIDEBAR_WIDTH + 1, y + 3,
+                x + PANEL_WIDTH - 3, y + PANEL_HEIGHT - 3, 0xFF1C1D1F);
         graphics.fill(x + SIDEBAR_WIDTH, y + 2, x + SIDEBAR_WIDTH + 1,
                 y + PANEL_HEIGHT - 2, 0xFF3A3935);
         graphics.fill(x + 52, y + 36, x + PANEL_WIDTH - 8, y + 37, 0xFF35332D);
         graphics.fill(x + 52, y + 165, x + PANEL_WIDTH - 8, y + 166, 0xFF2E2E2D);
+        graphics.fill(x + 52, y + 188, x + PANEL_WIDTH - 8, y + 189, 0xFF2E2E2D);
         renderSidebar(graphics, x, y);
         for (int index = 0; index < 45; index++) {
             Slot slot = menu.getSlot(index);
@@ -59,27 +59,47 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
         }
     }
 
-    private void drawMetalTexture(GuiGraphics graphics, int x, int y, int width, int height) {
-        graphics.fill(x, y, x + width, y + height, 0xFF1C1D1F);
-        for (int line = 15; line < height; line += 24)
-            graphics.fill(x + 1, y + line, x + width - 1, y + line + 1, 0xFF202123);
-        for (int column = 26; column < width; column += 53)
-            graphics.fill(x + column, y + 1, x + column + 1, y + height - 1, 0xFF191A1B);
+    private void renderSidebar(GuiGraphics graphics, int x, int y) {
+        boolean vipActive = menu.getSlot(TAB_VIP).getItem().is(Items.GOLD_BLOCK);
+        boolean loreActive = menu.getSlot(TAB_LORE).getItem().is(Items.AMETHYST_BLOCK);
+        drawTab(graphics, x + 7, y + 9, vipActive, false);
+        drawTab(graphics, x + 7, y + 44, loreActive, true);
     }
 
-    private void renderSidebar(GuiGraphics graphics, int x, int y) {
-        graphics.fill(x + 7, y + 9, x + 36, y + 42, 0xFF8A6826);
-        graphics.fill(x + 8, y + 10, x + 35, y + 41, 0xFF2A271F);
-        graphics.fill(x + 8, y + 10, x + 10, y + 41, GOLD);
-        graphics.renderItem(new ItemStack(Items.CHEST), x + 14, y + 18);
+    private void drawTab(GuiGraphics graphics, int x, int y, boolean active, boolean lore) {
+        int accent = lore ? 0xFF9B6CB7 : GOLD;
+        if (active) {
+            graphics.fill(x, y, x + 29, y + 30, 0xFF765A24);
+            graphics.fill(x + 1, y + 1, x + 28, y + 29, 0xFF292720);
+            graphics.fill(x + 1, y + 1, x + 3, y + 29, accent);
+        }
+        int color = active ? accent : 0xFF777872;
+        if (lore) drawHourglass(graphics, x + 10, y + 8, color);
+        else drawChest(graphics, x + 9, y + 9, color);
+    }
+
+    private void drawChest(GuiGraphics graphics, int x, int y, int color) {
+        graphics.fill(x + 1, y + 3, x + 11, y + 4, color);
+        graphics.fill(x, y + 4, x + 12, y + 6, color);
+        graphics.fill(x + 1, y + 6, x + 11, y + 13, color);
+        graphics.fill(x + 2, y + 7, x + 10, y + 12, 0xFF242321);
+        graphics.fill(x + 5, y + 6, x + 7, y + 9, color);
+    }
+
+    private void drawHourglass(GuiGraphics graphics, int x, int y, int color) {
+        graphics.fill(x, y, x + 10, y + 2, color);
+        graphics.fill(x, y + 12, x + 10, y + 14, color);
+        for (int row = 0; row < 5; row++) {
+            graphics.fill(x + 1 + row, y + 2 + row, x + 3 + row, y + 3 + row, color);
+            graphics.fill(x + 7 - row, y + 2 + row, x + 9 - row, y + 3 + row, color);
+            graphics.fill(x + 4 - row, y + 7 + row, x + 6 - row, y + 8 + row, color);
+            graphics.fill(x + 4 + row, y + 7 + row, x + 6 + row, y + 8 + row, color);
+        }
     }
 
     private void drawSlotFrame(GuiGraphics graphics, int x, int y) {
-        graphics.fill(x - 3, y - 3, x + 19, y + 19, 0xFF08090A);
-        graphics.fill(x - 2, y - 2, x + 18, y + 18, 0xFF3A3B3C);
-        graphics.fill(x - 1, y - 1, x + 17, y + 17, 0xFF101113);
-        graphics.fill(x, y, x + 16, y + 1, 0xFF08090A);
-        graphics.fill(x, y + 1, x + 1, y + 16, 0xFF08090A);
+        graphics.fill(x - 2, y - 2, x + 18, y + 18, 0xFF454648);
+        graphics.fill(x - 1, y - 1, x + 17, y + 17, 0xFF111214);
     }
 
     @Override protected void renderSlot(GuiGraphics graphics, Slot slot) {
@@ -98,11 +118,12 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
         if (menu.getSlot(NEXT).getItem().is(Items.ARROW))
             drawNavigationButton(graphics, leftPos + 240, y, true,
                     hovered(mouseX, mouseY, 240, 170, 20, 13));
-        boolean closeHovered = hovered(mouseX, mouseY, 264, 168, 16, 16);
-        graphics.fill(leftPos + 264, topPos + 168, leftPos + 280, topPos + 184, 0xFF0B0C0D);
-        graphics.fill(leftPos + 265, topPos + 169, leftPos + 279, topPos + 183,
-                closeHovered ? 0xFF7A2D2D : 0xFF4B2222);
-        graphics.drawCenteredString(font, "×", leftPos + 272, topPos + 172, 0xFFE5B1A6);
+        boolean closeHovered = hovered(mouseX, mouseY, 230, 192, 48, 14);
+        graphics.fill(leftPos + 230, topPos + 192, leftPos + 278, topPos + 206, 0xFF494A48);
+        graphics.fill(leftPos + 231, topPos + 193, leftPos + 277, topPos + 205,
+                closeHovered ? 0xFF303133 : 0xFF202123);
+        graphics.drawCenteredString(font, "FECHAR", leftPos + 254, topPos + 195,
+                closeHovered ? GOLD : TEXT);
     }
 
     private void drawNavigationButton(GuiGraphics graphics, int x, int y, boolean right, boolean over) {
@@ -133,7 +154,17 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
                 slotClicked(menu.getSlot(NEXT), NEXT, 0, ClickType.PICKUP);
                 return true;
             }
-            if (hovered(mouseX, mouseY, 264, 168, 16, 16)) {
+            if (hovered(mouseX, mouseY, 7, 9, 29, 30)
+                    && !menu.getSlot(TAB_VIP).getItem().is(Items.GOLD_BLOCK)) {
+                slotClicked(menu.getSlot(TAB_VIP), TAB_VIP, 0, ClickType.PICKUP);
+                return true;
+            }
+            if (hovered(mouseX, mouseY, 7, 44, 29, 30)
+                    && !menu.getSlot(TAB_LORE).getItem().is(Items.AMETHYST_BLOCK)) {
+                slotClicked(menu.getSlot(TAB_LORE), TAB_LORE, 0, ClickType.PICKUP);
+                return true;
+            }
+            if (hovered(mouseX, mouseY, 230, 192, 48, 14)) {
                 slotClicked(menu.getSlot(CLOSE), CLOSE, 0, ClickType.PICKUP);
                 return true;
             }
@@ -149,14 +180,19 @@ final class NoverisVaultScreen extends AbstractContainerScreen<NoverisVaultMenu>
         else if (hovered(mouseX, mouseY, 240, 170, 20, 13)
                 && menu.getSlot(NEXT).getItem().is(Items.ARROW))
             tooltip = Component.literal("Próxima página");
-        else if (hovered(mouseX, mouseY, 264, 168, 16, 16))
+        else if (hovered(mouseX, mouseY, 7, 9, 29, 30))
+            tooltip = Component.literal("Cofre VIP");
+        else if (hovered(mouseX, mouseY, 7, 44, 29, 30))
+            tooltip = Component.literal("Cofre de relíquias");
+        else if (hovered(mouseX, mouseY, 230, 192, 48, 14))
             tooltip = Component.literal("Fechar");
         if (tooltip != null) graphics.renderTooltip(font, tooltip, mouseX, mouseY);
     }
 
     @Override protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
-        int titleWidth = PANEL_WIDTH - titleLabelX - 12;
+        int titleWidth = 183;
         String fittedTitle = font.plainSubstrByWidth(title.getString(), titleWidth);
         graphics.drawString(font, fittedTitle, titleLabelX, titleLabelY, GOLD, false);
+        graphics.drawString(font, "Todos", 251, titleLabelY, MUTED, false);
     }
 }

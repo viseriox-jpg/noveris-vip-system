@@ -920,12 +920,17 @@ final class VipService {
     VipStore data(MinecraftServer server) { return store(server); }
 
     void openVault(ServerPlayer staff, ServerPlayer target) {
+        openVault(staff, target.getUUID(), target.getName().getString());
+    }
+
+    void openVault(ServerPlayer staff, UUID targetId, String targetName) {
         VipStore current = store(staff.getServer());
         List<VipStore.VaultEntry> entries = current.data.vault.getOrDefault(
-                target.getUUID().toString(), List.of());
+                targetId.toString(), List.of());
         SimpleContainer inventory = new SimpleContainer(54);
-        staff.openMenu(new SimpleMenuProvider((id, inv, player) -> new VaultViewMenu(id, inv, inventory, entries),
-                Component.literal("Cofre VIP de " + target.getName().getString() + " | " + entries.size() + " itens")));
+        staff.openMenu(new SimpleMenuProvider((id, inv, player) ->
+                new VaultViewMenu(id, inv, inventory, entries, targetId, targetName),
+                Component.literal("COFRE VIP — " + targetName + " | " + entries.size() + " itens")));
     }
 
     VaultResult restoreVault(ServerPlayer staff, ServerPlayer target, int oneBasedSlot,

@@ -13,17 +13,22 @@ import net.minecraft.world.item.component.ItemLore;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 final class LoreVaultMenu extends NoverisVaultMenu {
-    private static final int PREVIOUS = 45, PAGE = 46, NEXT = 52, CLOSE = 53;
+    private static final int PREVIOUS = 45, PAGE = 46, TAB_VIP = 47, TAB_LORE = 48, NEXT = 52, CLOSE = 53;
     private final SimpleContainer display;
     private final Inventory inventory;
     private final List<LoreStore.VaultEntry> entries;
+    private final UUID targetId;
+    private final String targetName;
     private int page;
 
-    LoreVaultMenu(int id, Inventory inventory, SimpleContainer display, List<LoreStore.VaultEntry> entries) {
+    LoreVaultMenu(int id, Inventory inventory, SimpleContainer display, List<LoreStore.VaultEntry> entries,
+                  UUID targetId, String targetName) {
         super(id, inventory, display);
         this.inventory = inventory; this.display = display; this.entries = entries;
+        this.targetId = targetId; this.targetName = targetName;
         rebuild();
     }
 
@@ -44,6 +49,8 @@ final class LoreVaultMenu extends NoverisVaultMenu {
         for (int slot = 45; slot < 54; slot++) control(slot, Items.BLACK_STAINED_GLASS_PANE, "Cofre de relíquias", ChatFormatting.GRAY);
         control(PREVIOUS, page > 0 ? Items.ARROW : Items.GRAY_DYE, page > 0 ? "← ANTERIOR" : "SEM PÁGINA ANTERIOR", ChatFormatting.AQUA);
         control(PAGE, Items.PAPER, "PÁGINA " + (page + 1) + "/" + pages() + " • " + entries.size() + " itens", ChatFormatting.YELLOW);
+        control(TAB_VIP, Items.CHEST, "COFRE VIP", ChatFormatting.GOLD);
+        control(TAB_LORE, Items.AMETHYST_BLOCK, "COFRE DE RELÍQUIAS", ChatFormatting.LIGHT_PURPLE);
         control(NEXT, page + 1 < pages() ? Items.ARROW : Items.GRAY_DYE, page + 1 < pages() ? "PRÓXIMA →" : "SEM PRÓXIMA PÁGINA", ChatFormatting.AQUA);
         control(CLOSE, Items.BARRIER, "FECHAR", ChatFormatting.RED);
         broadcastChanges();
@@ -56,6 +63,12 @@ final class LoreVaultMenu extends NoverisVaultMenu {
     @Override public void clicked(int slot, int button, ClickType type, Player player) {
         if (slot == PREVIOUS && page > 0) { page--; rebuild(); return; }
         if (slot == NEXT && page + 1 < pages()) { page++; rebuild(); return; }
+        if (slot == TAB_VIP && player instanceof net.minecraft.server.level.ServerPlayer staff
+                && staff.createCommandSourceStack().hasPermission(
+                VipConfig.load(staff.getServer()).vault)) {
+            new VipService().openVault(staff, targetId, targetName);
+            return;
+        }
         if (slot == CLOSE) { player.closeContainer(); return; }
         if (slot >= 0 && slot < 54) return;
         super.clicked(slot, button, type, player);
